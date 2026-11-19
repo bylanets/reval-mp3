@@ -1,0 +1,329 @@
+﻿<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reval MP3 Dönüştürücü • YouTube to MP3 320kbps</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Stil Dosyası -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <!-- Arka Plan Neon Efektleri -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+
+    <div class="app-wrapper">
+        <!-- Üst Başlık Bölümü -->
+        <header class="app-header">
+            <div class="badge-pill">
+                <i class="fa-solid fa-bolt"></i> Ultra Hızlı • 320 kbps MP3
+            </div>
+            <h1 class="app-title">
+                <span class="neon-text">Reval</span> MP3 Dönüştürücü
+            </h1>
+            <p class="app-subtitle">
+                YouTube videolarını en yüksek ses kalitesiyle anında MP3'e çevirin ve indirin.
+            </p>
+        </header>
+
+        <!-- Ana Kart -->
+        <main class="converter-card">
+            
+            <!-- Hata Bildirimi (Varsayılan olarak gizli) -->
+            <div id="errorBox" class="alert-box alert-error" style="display: none;">
+                <div class="alert-icon">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div class="alert-content">
+                    <span class="alert-title">Bir Hata Oluştu</span>
+                    <span id="errorMessage" class="alert-desc"></span>
+                </div>
+                <button type="button" class="alert-close" onclick="hideError()">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Backend'den gelen olası indirme hatası -->
+            {% if download_error %}
+            <div class="alert-box alert-error">
+                <div class="alert-icon"><i class="fa-solid fa-circle-exclamation"></i></div>
+                <div class="alert-content">
+                    <span class="alert-title">İndirme Uyarısı</span>
+                    <span class="alert-desc">{{ download_error }}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Form Bölümü -->
+            <form id="convertForm" onsubmit="handleConvert(event)">
+                <div class="input-group">
+                    <span class="input-icon">
+                        <i class="fa-brands fa-youtube"></i>
+                    </span>
+                    <input 
+                        type="url" 
+                        id="videoUrl" 
+                        name="url" 
+                        placeholder="YouTube video linkini yapıştırın (https://www.youtube.com/watch?v=...)" 
+                        autocomplete="off" 
+                        required
+                    >
+                    <button type="button" id="pasteBtn" class="btn-input-action" title="Panodan Yapıştır" onclick="handlePaste()">
+                        <i class="fa-regular fa-clipboard"></i>
+                    </button>
+                    <button type="button" id="clearBtn" class="btn-input-action" title="Temizle" onclick="handleClear()" style="display: none;">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <button type="submit" id="submitBtn" class="btn-convert">
+                    <span class="btn-content">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        <span>Dönüştür</span>
+                    </span>
+                    <span class="btn-glow"></span>
+                </button>
+            </form>
+
+            <!-- Yükleniyor Bölümü (Varsayılan olarak gizli) -->
+            <div id="loadingBox" class="loading-container" style="display: none;">
+                <div class="spinner-wrapper">
+                    <div class="neon-spinner"></div>
+                    <div class="spinner-center-icon">
+                        <i class="fa-solid fa-music"></i>
+                    </div>
+                </div>
+                
+                <!-- Ses Dalgası (Equalizer) Animasyonu -->
+                <div class="sound-wave">
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                </div>
+
+                <h3 class="loading-title">Dönüştürülüyor...</h3>
+                <p id="loadingStatusText" class="loading-desc">YouTube'dan video bilgileri alınıyor ve 320 kbps MP3 hazırlanıyor...</p>
+            </div>
+
+            <!-- Sonuç Kartı (Dönüşüm tamamlanınca beliren bölüm) -->
+            <div id="resultBox" class="result-container" style="display: none;">
+                <div class="result-header">
+                    <div class="status-badge success-badge">
+                        <i class="fa-solid fa-circle-check"></i> Dönüşüm Tamamlandı
+                    </div>
+                </div>
+
+                <div class="result-body">
+                    <div class="thumbnail-wrapper">
+                        <img id="resThumbnail" src="" alt="Video Thumbnail" class="thumbnail-img">
+                        <div class="duration-overlay" id="resDuration">00:00</div>
+                    </div>
+
+                    <div class="meta-info">
+                        <h2 id="resTitle" class="video-title">Şarkı Başlığı</h2>
+                        <p id="resUploader" class="video-channel">
+                            <i class="fa-solid fa-user-circle"></i> Kanal Adı
+                        </p>
+
+                        <div class="info-badges">
+                            <span class="badge info-pill">
+                                <i class="fa-solid fa-music"></i> MP3 320 kbps
+                            </span>
+                            <span class="badge info-pill" id="resSize">
+                                <i class="fa-solid fa-hard-drive"></i> 0.0 MB
+                            </span>
+                            <span class="badge info-pill neon-pill">
+                                <i class="fa-solid fa-shield-halved"></i> Orijinal Ses
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="result-actions">
+                    <a id="downloadBtn" href="#" class="btn-download">
+                        <i class="fa-solid fa-download"></i>
+                        <span>MP3 Dosyasını İndir</span>
+                    </a>
+                    <button type="button" class="btn-reset" onclick="resetForm()">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span>Yeni Dönüşüm</span>
+                    </button>
+                </div>
+                
+                <p class="cleanup-hint">
+                    <i class="fa-solid fa-circle-info"></i> İndirme başlatıldığında geçici dosya sunucudan otomatik olarak silinir.
+                </p>
+            </div>
+
+        </main>
+
+        <!-- Alt Bilgi -->
+        <footer class="app-footer">
+            <p>
+                <i class="fa-solid fa-desktop"></i> Reval MP3 Dönüştürücü • Kişisel Localhost Kullanımı
+            </p>
+        </footer>
+    </div>
+
+    <!-- Uygulama Scripti -->
+    <script>
+        const videoUrlInput = document.getElementById('videoUrl');
+        const clearBtn = document.getElementById('clearBtn');
+        const pasteBtn = document.getElementById('pasteBtn');
+        const convertForm = document.getElementById('convertForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const loadingBox = document.getElementById('loadingBox');
+        const loadingStatusText = document.getElementById('loadingStatusText');
+        const resultBox = document.getElementById('resultBox');
+        const errorBox = document.getElementById('errorBox');
+        const errorMessage = document.getElementById('errorMessage');
+
+        const resThumbnail = document.getElementById('resThumbnail');
+        const resTitle = document.getElementById('resTitle');
+        const resUploader = document.getElementById('resUploader');
+        const resDuration = document.getElementById('resDuration');
+        const resSize = document.getElementById('resSize');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        // Input takip (temizle butonu kontrolü)
+        videoUrlInput.addEventListener('input', () => {
+            if (videoUrlInput.value.trim().length > 0) {
+                clearBtn.style.display = 'inline-flex';
+                pasteBtn.style.display = 'none';
+            } else {
+                clearBtn.style.display = 'none';
+                pasteBtn.style.display = 'inline-flex';
+            }
+        });
+
+        // Panodan yapıştırma
+        async function handlePaste() {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    videoUrlInput.value = text;
+                    clearBtn.style.display = 'inline-flex';
+                    pasteBtn.style.display = 'none';
+                    videoUrlInput.focus();
+                }
+            } catch (err) {
+                videoUrlInput.focus();
+            }
+        }
+
+        // Temizleme
+        function handleClear() {
+            videoUrlInput.value = '';
+            clearBtn.style.display = 'none';
+            pasteBtn.style.display = 'inline-flex';
+            videoUrlInput.focus();
+        }
+
+        // Hata göster / gizle
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorBox.style.display = 'flex';
+            errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function hideError() {
+            errorBox.style.display = 'none';
+        }
+
+        // Form sıfırlama (Yeni Dönüşüm)
+        function resetForm() {
+            resultBox.style.display = 'none';
+            loadingBox.style.display = 'none';
+            convertForm.style.display = 'block';
+            submitBtn.disabled = false;
+            handleClear();
+            hideError();
+        }
+
+        // Dönüştürme işlemi
+        async function handleConvert(e) {
+            e.preventDefault();
+            hideError();
+
+            const url = videoUrlInput.value.trim();
+            if (!url) {
+                showError("Lütfen bir YouTube bağlantısı girin.");
+                return;
+            }
+
+            // Arayüzü dönüştürme moduna al
+            submitBtn.disabled = true;
+            loadingBox.style.display = 'flex';
+            resultBox.style.display = 'none';
+
+            // Yükleme mesajı animasyonu
+            const statusMessages = [
+                "YouTube videosu analiz ediliyor...",
+                "En yüksek kalitede ses akışı çekiliyor...",
+                "FFmpeg ile 320 kbps MP3 formatına dönüştürülüyor...",
+                "Ses etiketleri optimize ediliyor..."
+            ];
+            let msgIndex = 0;
+            loadingStatusText.textContent = statusMessages[0];
+            const interval = setInterval(() => {
+                msgIndex = (msgIndex + 1) % statusMessages.length;
+                loadingStatusText.textContent = statusMessages[msgIndex];
+            }, 3200);
+
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+                clearInterval(interval);
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || "Dönüştürme sırasında bilinmeyen bir hata oluştu.");
+                }
+
+                // Başarılı sonuçları doldur
+                resThumbnail.src = data.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80';
+                resTitle.textContent = data.title;
+                resUploader.innerHTML = `<i class="fa-solid fa-circle-user"></i> ${data.uploader || 'Bilinmeyen Sanatçı'}`;
+                resDuration.textContent = data.duration;
+                resSize.innerHTML = `<i class="fa-solid fa-hard-drive"></i> ${data.size}`;
+                
+                // İndirme linkini ata
+                downloadBtn.href = `/download/${data.file_id}`;
+                downloadBtn.onclick = function() {
+                    // İndirme tetiklendikten sonra buton durumunu güncelle
+                    setTimeout(() => {
+                        downloadBtn.classList.add('downloaded');
+                        downloadBtn.innerHTML = `<i class="fa-solid fa-check"></i> <span>İndirme Başlatıldı</span>`;
+                    }, 500);
+                };
+
+                // Görünümleri güncelle
+                loadingBox.style.display = 'none';
+                convertForm.style.display = 'none';
+                resultBox.style.display = 'flex';
+
+            } catch (err) {
+                clearInterval(interval);
+                loadingBox.style.display = 'none';
+                submitBtn.disabled = false;
+                showError(err.message || "Bağlantı hatası oluştu.");
+            }
+        }
+    </script>
+</body>
+</html>
