@@ -1,0 +1,325 @@
+﻿<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reval Kurucu Paneli • Canlı Yönetim</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="kurucu-body">
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
+    <!-- 1. GİRİŞ MODAL'I / ŞİFRE EKRANI -->
+    <div id="loginScreen" class="kurucu-login-wrap">
+        <div class="converter-card kurucu-login-card">
+            <div class="kurucu-crown-icon">
+                <i class="fa-solid fa-crown"></i>
+            </div>
+            <h2 class="kurucu-login-title">Kurucu Girişi</h2>
+            <p class="kurucu-login-desc">Bu alan sadece sistem yöneticilerine ve kurucuya özeldir.</p>
+            
+            <form onsubmit="handleAdminLogin(event)" class="kurucu-login-form">
+                <div class="input-group">
+                    <span class="input-icon"><i class="fa-solid fa-key" style="color: #a855f7;"></i></span>
+                    <input type="password" id="adminPassInput" placeholder="Kurucu Şifresini Girin..." required autocomplete="off">
+                </div>
+                <div id="loginError" class="login-error-text" style="display: none;"></div>
+                <button type="submit" id="loginBtn" class="btn-convert" style="margin-top: 16px;">
+                    <span class="btn-content">
+                        <i class="fa-solid fa-unlock-keyhole"></i>
+                        <span>Panele Giriş Yap</span>
+                    </span>
+                </button>
+            </form>
+            <a href="/" class="back-to-site"><i class="fa-solid fa-arrow-left"></i> Ana Siteye Dön</a>
+        </div>
+    </div>
+
+    <!-- 2. ANA YÖNETİM PANELİ -->
+    <div id="dashboardScreen" class="kurucu-dashboard" style="display: none;">
+        <!-- Header -->
+        <header class="kurucu-nav">
+            <div class="kurucu-brand">
+                <i class="fa-solid fa-crown"></i>
+                <span>Reval • Kurucu Paneli</span>
+            </div>
+            <div class="kurucu-actions">
+                <a href="/" class="btn-nav-outline" target="_blank"><i class="fa-solid fa-external-link"></i> Siteye Git</a>
+                <button type="button" class="btn-nav-outline" onclick="loadDashboardData()"><i class="fa-solid fa-rotate"></i> Yenile</button>
+                <button type="button" class="btn-logout" onclick="logoutAdmin()"><i class="fa-solid fa-right-from-bracket"></i> Çıkış</button>
+            </div>
+        </header>
+
+        <!-- İstatistik Kartları -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon icon-users"><i class="fa-solid fa-users"></i></div>
+                <div class="stat-info">
+                    <span class="stat-num" id="statVisitors">0</span>
+                    <span class="stat-label">Toplam Ziyaretçi</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon icon-music"><i class="fa-solid fa-music"></i></div>
+                <div class="stat-info">
+                    <span class="stat-num" id="statConversions">0</span>
+                    <span class="stat-label">Dönüştürülen Parça</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon icon-comments"><i class="fa-solid fa-comments"></i></div>
+                <div class="stat-info">
+                    <span class="stat-num" id="statComments">0</span>
+                    <span class="stat-label">Topluluk Yorumu</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sekmeler (Tabs) -->
+        <div class="tab-header">
+            <button type="button" class="tab-btn active" onclick="switchTab('visitors')">
+                <i class="fa-solid fa-user-shield"></i> Siteye Giren Kişiler & IP'ler
+            </button>
+            <button type="button" class="tab-btn" onclick="switchTab('conversions')">
+                <i class="fa-solid fa-list-check"></i> Tüm Dönüştürmeler
+            </button>
+            <button type="button" class="tab-btn" onclick="switchTab('comments')">
+                <i class="fa-solid fa-comment-dots"></i> Yorum Yönetimi
+            </button>
+        </div>
+
+        <!-- TAB 1: ZİYARETÇİLER -->
+        <section id="tabVisitors" class="tab-content active">
+            <div class="table-card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Verilen İsim</th>
+                                <th>IP Adresi</th>
+                                <th>İlk Giriş</th>
+                                <th>Son Görülme</th>
+                                <th>Dönüştürme</th>
+                            </tr>
+                        </thead>
+                        <tbody id="visitorsTbody">
+                            <tr><td colspan="6" class="text-center">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: DÖNÜŞTÜRMELER -->
+        <section id="tabConversions" class="tab-content">
+            <div class="table-card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Thumbnail</th>
+                                <th>Parça Başlığı</th>
+                                <th>Dönüştüren</th>
+                                <th>IP</th>
+                                <th>Süre / Boyut</th>
+                                <th>Tarih</th>
+                                <th>İndir</th>
+                            </tr>
+                        </thead>
+                        <tbody id="conversionsTbody">
+                            <tr><td colspan="7" class="text-center">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: YORUMLAR -->
+        <section id="tabComments" class="tab-content">
+            <div class="table-card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Yazar</th>
+                                <th>Yorum Metni</th>
+                                <th>IP</th>
+                                <th>Tarih</th>
+                                <th>İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody id="commentsTbody">
+                            <tr><td colspan="6" class="text-center">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const loginScreen = document.getElementById('loginScreen');
+        const dashboardScreen = document.getElementById('dashboardScreen');
+        const adminPassInput = document.getElementById('adminPassInput');
+        const loginError = document.getElementById('loginError');
+
+        async function handleAdminLogin(e) {
+            e.preventDefault();
+            const pass = adminPassInput.value;
+            loginError.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/kurucu/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pass })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loginScreen.style.display = 'none';
+                    dashboardScreen.style.display = 'block';
+                    loadDashboardData();
+                } else {
+                    loginError.textContent = data.error || "Hatalı şifre!";
+                    loginError.style.display = 'block';
+                }
+            } catch (err) {
+                loginError.textContent = "Giriş yapılamadı, bağlantı hatası.";
+                loginError.style.display = 'block';
+            }
+        }
+
+        async function loadDashboardData() {
+            try {
+                const res = await fetch('/api/kurucu/data');
+                const data = await res.json();
+                if (!data.success) {
+                    loginScreen.style.display = 'flex';
+                    dashboardScreen.style.display = 'none';
+                    return;
+                }
+
+                // İstatistikler
+                document.getElementById('statVisitors').textContent = data.stats.total_visitors;
+                document.getElementById('statConversions').textContent = data.stats.total_conversions;
+                document.getElementById('statComments').textContent = data.stats.total_comments;
+
+                // Ziyaretçiler Tablosu
+                const vTbody = document.getElementById('visitorsTbody');
+                if (data.visitors.length === 0) {
+                    vTbody.innerHTML = '<tr><td colspan="6" class="text-center">Kayıtlı ziyaretçi bulunamadı.</td></tr>';
+                } else {
+                    vTbody.innerHTML = data.visitors.map(v => `
+                        <tr>
+                            <td>#${v.id}</td>
+                            <td><strong class="user-highlight"><i class="fa-solid fa-user"></i> ${escapeHtml(v.username)}</strong></td>
+                            <td><code class="ip-code">${escapeHtml(v.ip)}</code></td>
+                            <td>${v.first_visit}</td>
+                            <td>${v.last_seen}</td>
+                            <td><span class="badge-count">${v.conversions_count} Parça</span></td>
+                        </tr>
+                    `).join('');
+                }
+
+                // Dönüştürmeler Tablosu
+                const cTbody = document.getElementById('conversionsTbody');
+                if (data.conversions.length === 0) {
+                    cTbody.innerHTML = '<tr><td colspan="7" class="text-center">Henüz dönüştürülen parça yok.</td></tr>';
+                } else {
+                    cTbody.innerHTML = data.conversions.map(c => `
+                        <tr>
+                            <td><img src="${c.thumbnail}" class="table-thumb" alt="thumb"></td>
+                            <td><div class="table-song-title">${escapeHtml(c.title)}</div></td>
+                            <td><strong>${escapeHtml(c.username || 'Anonim')}</strong></td>
+                            <td><code class="ip-code">${escapeHtml(c.ip || '-')}</code></td>
+                            <td>${c.duration} / ${c.size}</td>
+                            <td>${c.created_at}</td>
+                            <td>
+                                <a href="/download/${c.file_id}" class="table-dl-btn" title="İndir"><i class="fa-solid fa-download"></i></a>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+
+                // Yorumlar Tablosu
+                const cmTbody = document.getElementById('commentsTbody');
+                if (data.comments.length === 0) {
+                    cmTbody.innerHTML = '<tr><td colspan="6" class="text-center">Hiç yorum yapılmamış.</td></tr>';
+                } else {
+                    cmTbody.innerHTML = data.comments.map(cm => `
+                        <tr>
+                            <td>#${cm.id}</td>
+                            <td><strong>${escapeHtml(cm.username)}</strong></td>
+                            <td><div class="table-comment-text">${escapeHtml(cm.text)}</div></td>
+                            <td><code class="ip-code">${escapeHtml(cm.ip || '-')}</code></td>
+                            <td>${cm.created_at}</td>
+                            <td>
+                                <button type="button" class="btn-del-comment" onclick="deleteComment(${cm.id})" title="Yorumu Sil">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+
+            } catch (err) {
+                console.error("Panel verisi alınamadı:", err);
+            }
+        }
+
+        async function deleteComment(id) {
+            if (!confirm("Bu yorumu silmek istediğinize emin misiniz?")) return;
+            try {
+                const res = await fetch('/api/kurucu/delete_comment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadDashboardData();
+                } else {
+                    alert("Yorum silinemedi!");
+                }
+            } catch (e) {
+                alert("Bağlantı hatası.");
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            if (tabId === 'visitors') {
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                document.getElementById('tabVisitors').classList.add('active');
+            } else if (tabId === 'conversions') {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+                document.getElementById('tabConversions').classList.add('active');
+            } else if (tabId === 'comments') {
+                document.querySelectorAll('.tab-btn')[2].classList.add('active');
+                document.getElementById('tabComments').classList.add('active');
+            }
+        }
+
+        function logoutAdmin() {
+            window.location.href = '/';
+        }
+
+        function escapeHtml(s) {
+            const m = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+            return String(s || '').replace(/[&<>"']/g, c => m[c]);
+        }
+
+        // Sayfa açılışında oturum kontrolü
+        loadDashboardData();
+    </script>
+</body>
+</html>

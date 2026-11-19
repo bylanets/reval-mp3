@@ -19,7 +19,45 @@
     <div class="ambient-glow glow-2"></div>
     <div class="ambient-glow glow-3"></div>
 
+    <!-- ZORUNLU İSİM GİRİŞ MODAL'I -->
+    <div id="nameModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-icon">
+                <i class="fa-solid fa-headphones"></i>
+            </div>
+            <h2 class="modal-title">Reval MP3'e Hoş Geldin!</h2>
+            <p class="modal-desc">
+                Müzik dönüştürmek ve topluluğa katılmak için lütfen bir <strong>kullanıcı adı</strong> veya <strong>ismini</strong> belirle:
+            </p>
+            <form onsubmit="handleSaveName(event)" class="modal-form">
+                <div class="modal-input-group">
+                    <i class="fa-solid fa-user"></i>
+                    <input type="text" id="modalNameInput" placeholder="Adını veya Takma Adını Yaz..." maxlength="25" required autocomplete="off">
+                </div>
+                <button type="submit" class="btn-modal-submit">
+                    <span>Giriş Yap ve Başla</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+            <p class="modal-hint"><i class="fa-solid fa-shield-halved"></i> İsminiz dönüştürdüğünüz parçalarda ve yorumlarda görünecektir.</p>
+        </div>
+    </div>
+
+    <!-- ANA UYGULAMA ALANI -->
     <div class="app-wrapper">
+        
+        <!-- Üst Bar (Kullanıcı Bilgisi & Kurucu Paneli Linki) -->
+        <nav class="top-navbar">
+            <div class="user-badge" id="userBadge" onclick="promptChangeName()" title="İsmini Değiştir">
+                <i class="fa-solid fa-circle-user"></i>
+                <span id="navUsername">Giriş Yapılıyor...</span>
+                <span class="change-hint"><i class="fa-solid fa-pen"></i></span>
+            </div>
+            <a href="/kurucu" class="kurucu-link" target="_blank" title="Kurucu Yönetim Paneli">
+                <i class="fa-solid fa-crown"></i> <span>Kurucu Paneli</span>
+            </a>
+        </nav>
+
         <!-- Üst Başlık Bölümü -->
         <header class="app-header">
             <div class="badge-pill">
@@ -29,14 +67,14 @@
                 <span class="neon-text">Reval</span> MP3 Dönüştürücü
             </h1>
             <p class="app-subtitle">
-                YouTube videolarını en yüksek ses kalitesiyle anında MP3'e çevirin ve indirin.
+                YouTube videolarını en yüksek ses kalitesiyle anında MP3'e çevirin ve doğrudan MTA linki alın.
             </p>
         </header>
 
-        <!-- Ana Kart -->
+        <!-- Ana Dönüştürücü Kartı -->
         <main class="converter-card">
             
-            <!-- Hata Bildirimi (Varsayılan olarak gizli) -->
+            <!-- Hata Bildirimi -->
             <div id="errorBox" class="alert-box alert-error" style="display: none;">
                 <div class="alert-icon">
                     <i class="fa-solid fa-triangle-exclamation"></i>
@@ -49,17 +87,6 @@
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
-
-            <!-- Backend'den gelen olası indirme hatası -->
-            {% if download_error %}
-            <div class="alert-box alert-error">
-                <div class="alert-icon"><i class="fa-solid fa-circle-exclamation"></i></div>
-                <div class="alert-content">
-                    <span class="alert-title">İndirme Uyarısı</span>
-                    <span class="alert-desc">{{ download_error }}</span>
-                </div>
-            </div>
-            {% endif %}
 
             <!-- Form Bölümü -->
             <form id="convertForm" onsubmit="handleConvert(event)">
@@ -92,7 +119,7 @@
                 </button>
             </form>
 
-            <!-- Yükleniyor Bölümü (Varsayılan olarak gizli) -->
+            <!-- Yükleniyor Göstergesi -->
             <div id="loadingBox" class="loading-container" style="display: none;">
                 <div class="spinner-wrapper">
                     <div class="neon-spinner"></div>
@@ -101,7 +128,6 @@
                     </div>
                 </div>
                 
-                <!-- Ses Dalgası (Equalizer) Animasyonu -->
                 <div class="sound-wave">
                     <div class="wave-bar"></div>
                     <div class="wave-bar"></div>
@@ -111,14 +137,14 @@
                 </div>
 
                 <h3 class="loading-title">Dönüştürülüyor...</h3>
-                <p id="loadingStatusText" class="loading-desc">YouTube'dan video bilgileri alınıyor ve 320 kbps MP3 hazırlanıyor...</p>
+                <p id="loadingStatusText" class="loading-desc">YouTube'dan video analiz ediliyor ve 320 kbps MP3 hazırlanıyor...</p>
             </div>
 
-            <!-- Sonuç Kartı (Dönüşüm tamamlanınca beliren bölüm) -->
+            <!-- Sonuç Kartı -->
             <div id="resultBox" class="result-container" style="display: none;">
                 <div class="result-header">
                     <div class="status-badge success-badge">
-                        <i class="fa-solid fa-circle-check"></i> Dönüşüm Tamamlandı
+                        <i class="fa-solid fa-circle-check"></i> Dönüşüm Başarılı!
                     </div>
                 </div>
 
@@ -131,7 +157,7 @@
                     <div class="meta-info">
                         <h2 id="resTitle" class="video-title">Şarkı Başlığı</h2>
                         <p id="resUploader" class="video-channel">
-                            <i class="fa-solid fa-user-circle"></i> Kanal Adı
+                            <i class="fa-solid fa-circle-user"></i> Kanal Adı
                         </p>
 
                         <div class="info-badges">
@@ -148,34 +174,125 @@
                     </div>
                 </div>
 
+                <!-- MTA Link Alanı & Butonlar -->
+                <div class="mta-link-box">
+                    <span class="mta-link-label"><i class="fa-solid fa-link"></i> Doğrudan MTA / Oynatma Linki:</span>
+                    <div class="mta-input-row">
+                        <input type="text" id="mtaLinkInput" readonly>
+                        <button type="button" class="btn-copy-mta" onclick="copyMtaLink()">
+                            <i class="fa-regular fa-copy"></i> <span>Kopyala</span>
+                        </button>
+                    </div>
+                </div>
+
                 <div class="result-actions">
                     <a id="downloadBtn" href="#" class="btn-download">
                         <i class="fa-solid fa-download"></i>
-                        <span>MP3 Dosyasını İndir</span>
+                        <span>MP3 Olarak İndir</span>
                     </a>
                     <button type="button" class="btn-reset" onclick="resetForm()">
                         <i class="fa-solid fa-rotate-left"></i>
                         <span>Yeni Dönüşüm</span>
                     </button>
                 </div>
-                
-                <p class="cleanup-hint">
-                    <i class="fa-solid fa-circle-info"></i> İndirme başlatıldığında geçici dosya sunucudan otomatik olarak silinir.
-                </p>
             </div>
 
         </main>
 
+        <!-- EN SON DÖNÜŞTÜRÜLEN 3 PARÇA PANELİ -->
+        <section class="section-card recent-section">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <i class="fa-solid fa-clock-rotate-left section-icon"></i>
+                    <h2>En Son Dönüştürülen 3 Parça</h2>
+                </div>
+                <button type="button" class="btn-refresh-recent" onclick="loadRecentConversions()" title="Yenile">
+                    <i class="fa-solid fa-rotate"></i>
+                </button>
+            </div>
+
+            <div id="recentContainer" class="recent-list">
+                <div class="recent-loading">Yükleniyor...</div>
+            </div>
+        </section>
+
+        <!-- YORUMLAR PANELİ -->
+        <section class="section-card comments-section">
+            <div class="section-header">
+                <div class="section-title-wrap">
+                    <i class="fa-solid fa-comments section-icon"></i>
+                    <h2>Topluluk Yorumları</h2>
+                </div>
+                <span class="comment-count-badge" id="commentCountBadge">0 Yorum</span>
+            </div>
+
+            <!-- Yorum Ekleme Formu -->
+            <div class="comment-form-container">
+                <div id="commentLockedNotice" class="comment-locked-notice" style="display: none;">
+                    <i class="fa-solid fa-lock"></i>
+                    <span>Yorum yazabilmek için lütfen önce isminizi belirleyin.</span>
+                    <button type="button" class="btn-unlock-name" onclick="promptChangeName()">İsim Belirle</button>
+                </div>
+
+                <form id="commentForm" onsubmit="handleAddComment(event)">
+                    <div class="comment-author-info">
+                        <i class="fa-solid fa-user-pen"></i>
+                        <span>Yorum Yapan: <strong id="commentAuthorName">Misafir</strong></span>
+                    </div>
+                    <div class="comment-textarea-wrap">
+                        <textarea 
+                            id="commentText" 
+                            placeholder="Müzik önerilerini, fikirlerini veya selamını yaz... (En fazla 500 karakter)" 
+                            maxlength="500" 
+                            rows="3" 
+                            required
+                        ></textarea>
+                    </div>
+                    <div class="comment-form-footer">
+                        <span class="char-counter" id="charCounter">0 / 500</span>
+                        <button type="submit" id="submitCommentBtn" class="btn-comment-submit">
+                            <i class="fa-solid fa-paper-plane"></i>
+                            <span>Yorum Paylaş</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Yorum Listesi -->
+            <div id="commentsList" class="comments-list">
+                <div class="comments-empty">Henüz hiç yorum yok. İlk yorumu sen yap! ✨</div>
+            </div>
+        </section>
+
         <!-- Alt Bilgi -->
         <footer class="app-footer">
             <p>
-                <i class="fa-solid fa-desktop"></i> Reval MP3 Dönüştürücü • Kişisel Localhost Kullanımı
+                <i class="fa-solid fa-shield-halved"></i> Reval MP3 Dönüştürücü &bull; MTA Uyumlu Doğrudan Stream Servisi
             </p>
         </footer>
     </div>
 
-    <!-- Uygulama Scripti -->
+    <!-- TOAST BİLDİRİMİ -->
+    <div id="toast" class="toast-popup" style="display: none;">
+        <i class="fa-solid fa-circle-check"></i>
+        <span id="toastMsg">İşlem Başarılı</span>
+    </div>
+
+    <!-- JavaScript Kodları -->
     <script>
+        // Global Değişkenler
+        let currentUsername = localStorage.getItem('reval_user_name') || '';
+
+        // DOM Elementleri
+        const nameModal = document.getElementById('nameModal');
+        const modalNameInput = document.getElementById('modalNameInput');
+        const navUsername = document.getElementById('navUsername');
+        const commentAuthorName = document.getElementById('commentAuthorName');
+        const commentLockedNotice = document.getElementById('commentLockedNotice');
+        const commentForm = document.getElementById('commentForm');
+        const commentText = document.getElementById('commentText');
+        const charCounter = document.getElementById('charCounter');
+
         const videoUrlInput = document.getElementById('videoUrl');
         const clearBtn = document.getElementById('clearBtn');
         const pasteBtn = document.getElementById('pasteBtn');
@@ -193,34 +310,316 @@
         const resDuration = document.getElementById('resDuration');
         const resSize = document.getElementById('resSize');
         const downloadBtn = document.getElementById('downloadBtn');
+        const mtaLinkInput = document.getElementById('mtaLinkInput');
 
-        // Input takip (temizle butonu kontrolü)
-        videoUrlInput.addEventListener('input', () => {
-            if (videoUrlInput.value.trim().length > 0) {
-                clearBtn.style.display = 'inline-flex';
-                pasteBtn.style.display = 'none';
-            } else {
-                clearBtn.style.display = 'none';
-                pasteBtn.style.display = 'inline-flex';
-            }
+        const recentContainer = document.getElementById('recentContainer');
+        const commentsList = document.getElementById('commentsList');
+        const commentCountBadge = document.getElementById('commentCountBadge');
+
+        // Sayfa Başlatma
+        document.addEventListener('DOMContentLoaded', () => {
+            initUser();
+            loadRecentConversions();
+            loadComments();
+
+            // Karakter sayacı
+            commentText.addEventListener('input', () => {
+                charCounter.textContent = `${commentText.value.length} / 500`;
+            });
+
+            // Input kontrolü
+            videoUrlInput.addEventListener('input', () => {
+                if (videoUrlInput.value.trim().length > 0) {
+                    clearBtn.style.display = 'inline-flex';
+                    pasteBtn.style.display = 'none';
+                } else {
+                    clearBtn.style.display = 'none';
+                    pasteBtn.style.display = 'inline-flex';
+                }
+            });
         });
 
-        // Panodan yapıştırma
-        async function handlePaste() {
+        // 1. KULLANICI İSİM YÖNETİMİ
+        function initUser() {
+            if (!currentUsername) {
+                nameModal.style.display = 'flex';
+                setTimeout(() => modalNameInput.focus(), 200);
+                updateUserInterface(null);
+            } else {
+                nameModal.style.display = 'none';
+                updateUserInterface(currentUsername);
+                // Sunucuya bildir
+                sendUserToServer(currentUsername);
+            }
+        }
+
+        function handleSaveName(e) {
+            e.preventDefault();
+            const val = modalNameInput.value.trim();
+            if (!val) return;
+            
+            currentUsername = val.substring(0, 25);
+            localStorage.setItem('reval_user_name', currentUsername);
+            nameModal.style.display = 'none';
+            updateUserInterface(currentUsername);
+            sendUserToServer(currentUsername);
+            showToast(`Hoş geldin, ${currentUsername}!`);
+        }
+
+        function promptChangeName() {
+            const newName = prompt("Yeni bir isim veya takma ad girin:", currentUsername);
+            if (newName && newName.trim()) {
+                currentUsername = newName.trim().substring(0, 25);
+                localStorage.setItem('reval_user_name', currentUsername);
+                updateUserInterface(currentUsername);
+                sendUserToServer(currentUsername);
+                showToast(`İsminiz güncellendi: ${currentUsername}`);
+            }
+        }
+
+        function updateUserInterface(username) {
+            if (username) {
+                navUsername.textContent = username;
+                commentAuthorName.textContent = username;
+                commentLockedNotice.style.display = 'none';
+                commentForm.style.display = 'block';
+            } else {
+                navUsername.textContent = "İsim Belirlenmedi";
+                commentLockedNotice.style.display = 'flex';
+                commentForm.style.display = 'none';
+            }
+        }
+
+        async function sendUserToServer(username) {
             try {
-                const text = await navigator.clipboard.readText();
+                await fetch('/api/register_user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: username })
+                });
+            } catch (e) {
+                console.error("Kullanıcı kaydı hatası:", e);
+            }
+        }
+
+        // 2. DÖNÜŞTÜRME
+        async function handleConvert(e) {
+            e.preventDefault();
+            hideError();
+
+            if (!currentUsername) {
+                nameModal.style.display = 'flex';
+                return;
+            }
+
+            const url = videoUrlInput.value.trim();
+            if (!url) {
+                showError("Lütfen geçerli bir YouTube linki girin.");
+                return;
+            }
+
+            submitBtn.disabled = true;
+            loadingBox.style.display = 'flex';
+            resultBox.style.display = 'none';
+
+            const statusMsgs = [
+                "YouTube videosu analiz ediliyor...",
+                "Android & Web istemcileriyle bot koruması aşılıyor...",
+                "En yüksek kalitede ses ayrıştırılıyor...",
+                "FFmpeg ile 320 kbps MP3 hazırlanıyor..."
+            ];
+            let idx = 0;
+            loadingStatusText.textContent = statusMsgs[0];
+            const interval = setInterval(() => {
+                idx = (idx + 1) % statusMsgs.length;
+                loadingStatusText.textContent = statusMsgs[idx];
+            }, 3000);
+
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url, username: currentUsername })
+                });
+
+                const data = await response.json();
+                clearInterval(interval);
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || "Dönüştürme başarısız oldu.");
+                }
+
+                // Bilgileri doldur
+                resThumbnail.src = data.thumbnail || '';
+                resTitle.textContent = data.title;
+                resUploader.innerHTML = `<i class="fa-solid fa-circle-user"></i> ${data.uploader || 'Bilinmeyen'}`;
+                resDuration.textContent = data.duration;
+                resSize.innerHTML = `<i class="fa-solid fa-hard-drive"></i> ${data.size}`;
+
+                // Doğrudan Link (MTA Uyumlu Tam URL)
+                const fullDownloadUrl = window.location.origin + data.download_url;
+                mtaLinkInput.value = fullDownloadUrl;
+                downloadBtn.href = data.download_url;
+
+                loadingBox.style.display = 'none';
+                convertForm.style.display = 'none';
+                resultBox.style.display = 'flex';
+
+                // Son dönüştürülenleri hemen tazele
+                loadRecentConversions();
+
+            } catch (err) {
+                clearInterval(interval);
+                loadingBox.style.display = 'none';
+                submitBtn.disabled = false;
+                showError(err.message || "Bağlantı hatası oluştu.");
+            }
+        }
+
+        // MTA Linkini Panoya Kopyalama
+        function copyMtaLink() {
+            mtaLinkInput.select();
+            navigator.clipboard.writeText(mtaLinkInput.value).then(() => {
+                showToast("MTA Oynatma Linki Panoya Kopyalandı! 🎵");
+            }).catch(() => {
+                document.execCommand('copy');
+                showToast("MTA Linki Kopyalandı!");
+            });
+        }
+
+        // 3. EN SON DÖNÜŞTÜRÜLEN 3 PARÇA
+        async function loadRecentConversions() {
+            try {
+                const res = await fetch('/api/recent');
+                const data = await res.json();
+                if (!data.success || !data.recent || data.recent.length === 0) {
+                    recentContainer.innerHTML = '<div class="recent-empty">Henüz dönüştürülen parça yok. İlk parçayı sen dönüştür!</div>';
+                    return;
+                }
+
+                recentContainer.innerHTML = data.recent.map(item => {
+                    const fullUrl = window.location.origin + item.download_url;
+                    return `
+                        <div class="recent-card">
+                            <div class="recent-thumb-wrap">
+                                <img src="${item.thumbnail || ''}" alt="${item.title}" class="recent-thumb">
+                                <span class="recent-duration">${item.duration}</span>
+                            </div>
+                            <div class="recent-details">
+                                <h4 class="recent-title" title="${item.title}">${item.title}</h4>
+                                <div class="recent-meta">
+                                    <span><i class="fa-solid fa-user"></i> ${item.username}</span>
+                                    <span>&bull;</span>
+                                    <span><i class="fa-solid fa-music"></i> 320 kbps</span>
+                                    <span>&bull;</span>
+                                    <span>${item.size}</span>
+                                </div>
+                            </div>
+                            <div class="recent-actions">
+                                <a href="${item.download_url}" class="btn-recent-dl" title="İndir">
+                                    <i class="fa-solid fa-download"></i>
+                                </a>
+                                <button type="button" class="btn-recent-copy" onclick="copyCustomUrl('${fullUrl}')" title="MTA Linkini Kopyala">
+                                    <i class="fa-regular fa-copy"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                recentContainer.innerHTML = '<div class="recent-empty">Son parçalar yüklenemedi.</div>';
+            }
+        }
+
+        function copyCustomUrl(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                showToast("MTA Müzik Linki Kopyalandı! 🎶");
+            });
+        }
+
+        // 4. YORUM YÖNETİMİ
+        async function loadComments() {
+            try {
+                const res = await fetch('/api/comments');
+                const data = await res.json();
+                if (!data.success || !data.comments) return;
+
+                commentCountBadge.textContent = `${data.comments.length} Yorum`;
+
+                if (data.comments.length === 0) {
+                    commentsList.innerHTML = '<div class="comments-empty">Henüz hiç yorum yok. İlk yorumu sen yap! ✨</div>';
+                    return;
+                }
+
+                commentsList.innerHTML = data.comments.map(c => `
+                    <div class="comment-item">
+                        <div class="comment-header">
+                            <div class="comment-author">
+                                <i class="fa-solid fa-circle-user"></i>
+                                <strong>${c.username}</strong>
+                            </div>
+                            <span class="comment-date">${c.created_at}</span>
+                        </div>
+                        <p class="comment-body">${escapeHtml(c.text)}</p>
+                    </div>
+                `).join('');
+
+            } catch (e) {
+                console.error("Yorumlar yüklenemedi:", e);
+            }
+        }
+
+        async function handleAddComment(e) {
+            e.preventDefault();
+            if (!currentUsername) {
+                nameModal.style.display = 'flex';
+                return;
+            }
+
+            const text = commentText.value.trim();
+            if (!text) return;
+
+            const submitBtn = document.getElementById('submitCommentBtn');
+            submitBtn.disabled = true;
+
+            try {
+                const res = await fetch('/api/comments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUsername, text: text })
+                });
+                const data = await res.json();
+                submitBtn.disabled = false;
+
+                if (!res.ok || !data.success) {
+                    alert(data.error || "Yorum eklenemedi.");
+                    return;
+                }
+
+                commentText.value = '';
+                charCounter.textContent = '0 / 500';
+                showToast("Yorumunuz paylaşıldı! 💬");
+                loadComments();
+
+            } catch (err) {
+                submitBtn.disabled = false;
+                alert("Bağlantı hatası: Yorum gönderilemedi.");
+            }
+        }
+
+        // YARDIMCI FONKSİYONLAR
+        function handlePaste() {
+            navigator.clipboard.readText().then(text => {
                 if (text) {
                     videoUrlInput.value = text;
                     clearBtn.style.display = 'inline-flex';
                     pasteBtn.style.display = 'none';
                     videoUrlInput.focus();
                 }
-            } catch (err) {
-                videoUrlInput.focus();
-            }
+            });
         }
 
-        // Temizleme
         function handleClear() {
             videoUrlInput.value = '';
             clearBtn.style.display = 'none';
@@ -228,7 +627,6 @@
             videoUrlInput.focus();
         }
 
-        // Hata göster / gizle
         function showError(msg) {
             errorMessage.textContent = msg;
             errorBox.style.display = 'flex';
@@ -239,7 +637,6 @@
             errorBox.style.display = 'none';
         }
 
-        // Form sıfırlama (Yeni Dönüşüm)
         function resetForm() {
             resultBox.style.display = 'none';
             loadingBox.style.display = 'none';
@@ -249,80 +646,19 @@
             hideError();
         }
 
-        // Dönüştürme işlemi
-        async function handleConvert(e) {
-            e.preventDefault();
-            hideError();
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            toastMsg.textContent = msg;
+            toast.style.display = 'flex';
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
 
-            const url = videoUrlInput.value.trim();
-            if (!url) {
-                showError("Lütfen bir YouTube bağlantısı girin.");
-                return;
-            }
-
-            // Arayüzü dönüştürme moduna al
-            submitBtn.disabled = true;
-            loadingBox.style.display = 'flex';
-            resultBox.style.display = 'none';
-
-            // Yükleme mesajı animasyonu
-            const statusMessages = [
-                "YouTube videosu analiz ediliyor...",
-                "En yüksek kalitede ses akışı çekiliyor...",
-                "FFmpeg ile 320 kbps MP3 formatına dönüştürülüyor...",
-                "Ses etiketleri optimize ediliyor..."
-            ];
-            let msgIndex = 0;
-            loadingStatusText.textContent = statusMessages[0];
-            const interval = setInterval(() => {
-                msgIndex = (msgIndex + 1) % statusMessages.length;
-                loadingStatusText.textContent = statusMessages[msgIndex];
-            }, 3200);
-
-            try {
-                const response = await fetch('/convert', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ url: url })
-                });
-
-                const data = await response.json();
-                clearInterval(interval);
-
-                if (!response.ok || !data.success) {
-                    throw new Error(data.error || "Dönüştürme sırasında bilinmeyen bir hata oluştu.");
-                }
-
-                // Başarılı sonuçları doldur
-                resThumbnail.src = data.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=400&q=80';
-                resTitle.textContent = data.title;
-                resUploader.innerHTML = `<i class="fa-solid fa-circle-user"></i> ${data.uploader || 'Bilinmeyen Sanatçı'}`;
-                resDuration.textContent = data.duration;
-                resSize.innerHTML = `<i class="fa-solid fa-hard-drive"></i> ${data.size}`;
-                
-                // İndirme linkini ata
-                downloadBtn.href = `/download/${data.file_id}`;
-                downloadBtn.onclick = function() {
-                    // İndirme tetiklendikten sonra buton durumunu güncelle
-                    setTimeout(() => {
-                        downloadBtn.classList.add('downloaded');
-                        downloadBtn.innerHTML = `<i class="fa-solid fa-check"></i> <span>İndirme Başlatıldı</span>`;
-                    }, 500);
-                };
-
-                // Görünümleri güncelle
-                loadingBox.style.display = 'none';
-                convertForm.style.display = 'none';
-                resultBox.style.display = 'flex';
-
-            } catch (err) {
-                clearInterval(interval);
-                loadingBox.style.display = 'none';
-                submitBtn.disabled = false;
-                showError(err.message || "Bağlantı hatası oluştu.");
-            }
+        function escapeHtml(string) {
+            const entityMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+            return String(string).replace(/[&<>"']/g, s => entityMap[s]);
         }
     </script>
 </body>
