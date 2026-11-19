@@ -34,7 +34,6 @@ def get_db():
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
-    # Ziyaretçiler tablosu
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS visitors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,7 +45,6 @@ def init_db():
             conversions_count INTEGER DEFAULT 0
         )
     ''')
-    # Dönüştürülen parçalar tablosu
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,12 +55,13 @@ def init_db():
             duration TEXT,
             uploader TEXT,
             size TEXT,
+            media_type TEXT DEFAULT 'MP3',
+            quality TEXT DEFAULT '320 kbps',
             username TEXT,
             ip TEXT,
             created_at TEXT NOT NULL
         )
     ''')
-    # Yorumlar tablosu
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,13 +71,21 @@ def init_db():
             created_at TEXT NOT NULL
         )
     ''')
+    
+    # Kolon var mı kontrolü (Geriye dönük uyumluluk)
+    cursor.execute('PRAGMA table_info(conversions)')
+    cols = [c[1] for c in cursor.fetchall()]
+    if 'media_type' not in cols:
+        cursor.execute("ALTER TABLE conversions ADD COLUMN media_type TEXT DEFAULT 'MP3'")
+    if 'quality' not in cols:
+        cursor.execute("ALTER TABLE conversions ADD COLUMN quality TEXT DEFAULT '320 kbps'")
+
     conn.commit()
     conn.close()
 
 init_db()
 
 def get_client_ip():
-    """Gerçek istemci IP adresini Cloudflare/Render arkasından doğru alır."""
     if request.headers.get('CF-Connecting-IP'):
         return request.headers.get('CF-Connecting-IP')
     if request.headers.get('X-Forwarded-For'):
@@ -88,7 +95,7 @@ def get_client_ip():
 def sanitize_filename(filename):
     clean = re.sub(r'[\\/*?:"<>|]', "", filename)
     clean = clean.strip()
-    return clean if clean else "audio"
+    return clean if clean else "media"
 
 def format_duration(seconds):
     if not seconds:
@@ -108,7 +115,6 @@ def format_size(bytes_size):
     return f"{mb:.2f} MB"
 
 def cleanup_expired_files(max_age_seconds=86400):
-    """24 saatten eski geçici dosyaları diskten siler."""
     now = time.time()
     try:
         for fname in os.listdir(DOWNLOAD_DIR):
@@ -137,7 +143,6 @@ def register_user():
     if not username:
         return jsonify({'success': False, 'error': 'İsim boş olamaz.'}), 400
     
-    # 25 karakter sınır
     username = username[:25]
     session['username'] = username
     
@@ -147,8 +152,7 @@ def register_user():
 
     conn = get_db()
     cursor = conn.cursor()
-    # Aynı IP ve isimde kullanıcı var mı?
-    cursor.execute('SELECT id, conversions_count FROM visitors WHERE ip = ? AND username = ?', (ip, username))
+    cursor.execute('SELECT id FROM visitors WHERE ip = ? AND username = ?', (ip, username))
     row = cursor.fetchone()
     if row:
         cursor.execute('UPDATE visitors SET last_seen = ?, user_agent = ? WHERE id = ?', (now_str, user_agent, row['id']))
@@ -162,7 +166,7 @@ def register_user():
 
     return jsonify({'success': True, 'username': username})
 
-# ================= DÖNÜŞTÜRME =================
+# ================= DÖNÜŞTÜRME (MP3 & MP4 DESTEKLİ) =================
 @app.route('/convert', methods=['POST'])
 def convert_video():
     cleanup_expired_files()
@@ -170,16 +174,16 @@ def convert_video():
     data = request.get_json(silent=True) or {}
     url = data.get('url', '').strip()
     username = data.get('username', '').strip() or session.get('username', 'Misafir')
-    
+    media_format = (data.get('format', 'mp3') or 'mp3').lower()
+    quality = str(data.get('quality', '320')).strip()
+
     if not url:
         return jsonify({'success': False, 'error': 'Lütfen geçerli bir YouTube video linki girin.'}), 400
     
-    # URL'den playlist parametrelerini ayıkla
     clean_url = re.sub(r'([?&])list=[^&]+', '', url)
     clean_url = re.sub(r'([?&])index=[^&]+', '', clean_url)
     clean_url = clean_url.rstrip('?&')
 
-    # YouTube URL basit doğrulama
     youtube_regex = r'^(https?://)?(www\.|m\.|music\.)?(youtube\.com|youtu\.be)/.+$'
     if not re.match(youtube_regex, clean_url):
         return jsonify({'success': False, 'error': 'Girdiğiniz link geçerli bir YouTube bağlantısı değil.'}), 400
@@ -187,15 +191,9 @@ def convert_video():
     file_id = uuid.uuid4().hex[:12]
     out_template = os.path.join(DOWNLOAD_DIR, f"{file_id}.%(ext)s")
 
-    # YouTube Bot Korumasını (Sign in to confirm you're not a bot) Aşan İstemciler
-    ydl_opts = {
-        'format': 'bestaudio/best',
+    # Temel ayarlar & Bot aşma
+    common_opts = {
         'outtmpl': out_template,
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '320',
-        }],
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
@@ -211,22 +209,64 @@ def convert_video():
         }
     }
 
+    if media_format == 'mp4':
+        # Video Kalitesi Seçimi: 1080, 720, 480, 360
+        valid_heights = ['1080', '720', '480', '360']
+        target_height = quality if quality in valid_heights else '720'
+        quality_label = f"{target_height}p HD" if int(target_height) >= 720 else f"{target_height}p"
+        
+        ydl_opts = dict(common_opts)
+        ydl_opts.update({
+            'format': f'bestvideo[height<={target_height}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={target_height}]+bestaudio/best[height<={target_height}]/best',
+            'merge_output_format': 'mp4',
+            'postprocessors': [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',
+            }]
+        })
+        expected_ext = 'mp4'
+    else:
+        # MP3 Kalitesi Seçimi: 320, 256, 192, 128 kbps
+        valid_mp3 = ['320', '256', '192', '128']
+        target_quality = quality if quality in valid_mp3 else '320'
+        quality_label = f"{target_quality} kbps"
+
+        ydl_opts = dict(common_opts)
+        ydl_opts.update({
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': target_quality,
+            }],
+        })
+        expected_ext = 'mp3'
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(clean_url, download=True)
             
-            raw_title = info.get('title', 'YouTube Audio')
+            raw_title = info.get('title', 'YouTube Media')
             safe_title = sanitize_filename(raw_title)
             thumbnail = info.get('thumbnail', '')
             duration = format_duration(info.get('duration'))
             uploader = info.get('uploader', 'Bilinmeyen Kanal')
             
-            expected_file = os.path.join(DOWNLOAD_DIR, f"{file_id}.mp3")
-            if not os.path.exists(expected_file):
-                return jsonify({'success': False, 'error': 'MP3 dönüştürme işlemi tamamlanamadı veya dosya bulunamadı.'}), 500
+            # Üretilen dosyanın yolunu bul
+            expected_file = os.path.join(DOWNLOAD_DIR, f"{file_id}.{expected_ext}")
             
-            file_size_bytes = os.path.getsize(expected_file)
-            file_size_str = format_size(file_size_bytes)
+            # Eğer beklenen uzantı tam oturmadıysa klasörde file_id ile başlayan dosyayı bul
+            if not os.path.exists(expected_file):
+                for f in os.listdir(DOWNLOAD_DIR):
+                    if f.startswith(file_id):
+                        expected_file = os.path.join(DOWNLOAD_DIR, f)
+                        expected_ext = f.split('.')[-1]
+                        break
+            
+            if not os.path.exists(expected_file):
+                return jsonify({'success': False, 'error': 'Dönüştürme işlemi tamamlanamadı veya dosya bulunamadı.'}), 500
+            
+            file_size_str = format_size(os.path.getsize(expected_file))
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             ip = get_client_ip()
 
@@ -234,11 +274,10 @@ def convert_video():
             conn = get_db()
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO conversions (file_id, title, safe_title, thumbnail, duration, uploader, size, username, ip, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (file_id, raw_title, safe_title, thumbnail, duration, uploader, file_size_str, username, ip, now_str))
+                INSERT INTO conversions (file_id, title, safe_title, thumbnail, duration, uploader, size, media_type, quality, username, ip, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (file_id, raw_title, safe_title, thumbnail, duration, uploader, file_size_str, expected_ext.upper(), quality_label, username, ip, now_str))
             
-            # Ziyaretçinin dönüştürme sayısını artır
             cursor.execute('''
                 UPDATE visitors SET conversions_count = conversions_count + 1, last_seen = ?
                 WHERE username = ? OR ip = ?
@@ -255,63 +294,15 @@ def convert_video():
                 'duration': duration,
                 'uploader': uploader,
                 'size': file_size_str,
-                'quality': '320 kbps (En Yüksek Kalite)',
+                'media_type': expected_ext.upper(),
+                'quality': quality_label,
                 'download_url': f"/download/{file_id}"
             })
 
     except yt_dlp.utils.DownloadError as de:
         error_msg = str(de)
-        if "Sign in to confirm you're not a bot" in error_msg:
-            # İkinci deneme: Sadece Android istemcisi ile tekrar dene
-            try:
-                ydl_opts_retry = dict(ydl_opts)
-                ydl_opts_retry['extractor_args'] = {'youtube': {'player_client': ['android']}}
-                with yt_dlp.YoutubeDL(ydl_opts_retry) as ydl2:
-                    info = ydl2.extract_info(clean_url, download=True)
-                    raw_title = info.get('title', 'YouTube Audio')
-                    safe_title = sanitize_filename(raw_title)
-                    thumbnail = info.get('thumbnail', '')
-                    duration = format_duration(info.get('duration'))
-                    uploader = info.get('uploader', 'Bilinmeyen Kanal')
-                    expected_file = os.path.join(DOWNLOAD_DIR, f"{file_id}.mp3")
-                    file_size_str = format_size(os.path.getsize(expected_file))
-                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    ip = get_client_ip()
-
-                    conn = get_db()
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        INSERT INTO conversions (file_id, title, safe_title, thumbnail, duration, uploader, size, username, ip, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (file_id, raw_title, safe_title, thumbnail, duration, uploader, file_size_str, username, ip, now_str))
-                    conn.commit()
-                    conn.close()
-
-                    return jsonify({
-                        'success': True,
-                        'file_id': file_id,
-                        'title': raw_title,
-                        'safe_title': safe_title,
-                        'thumbnail': thumbnail,
-                        'duration': duration,
-                        'uploader': uploader,
-                        'size': file_size_str,
-                        'quality': '320 kbps (En Yüksek Kalite)',
-                        'download_url': f"/download/{file_id}"
-                    })
-            except Exception as e2:
-                return jsonify({'success': False, 'error': f"YouTube bot doğrulaması istedi: {str(e2)}"}), 400
-
-        if "Private video" in error_msg:
-            msg = "Bu video gizli olduğu için indirilemiyor."
-        elif "Video unavailable" in error_msg:
-            msg = "Video bulunamadı veya kullanılamıyor."
-        elif "Sign in to confirm your age" in error_msg:
-            msg = "Bu video yaş kısıtlamalı olduğu için oturum gerektiriyor."
-        else:
-            clean_err = error_msg.split('ERROR:')[-1].strip()
-            msg = f"Dönüştürme hatası: {clean_err}"
-        return jsonify({'success': False, 'error': msg}), 400
+        clean_err = error_msg.split('ERROR:')[-1].strip()
+        return jsonify({'success': False, 'error': f"İndirme hatası: {clean_err}"}), 400
     except Exception as e:
         return jsonify({'success': False, 'error': f"Beklenmeyen bir hata oluştu: {str(e)}"}), 500
 
@@ -321,25 +312,33 @@ def download_file(file_id):
     if not re.match(r'^[a-zA-Z0-9]+$', file_id):
         abort(400, "Geçersiz dosya kimliği.")
 
-    file_path = os.path.join(DOWNLOAD_DIR, f"{file_id}.mp3")
-    
-    if not os.path.exists(file_path):
-        return render_template('index.html', download_error="Bu parçanın süresi dolmuş veya dosya bulunamadı."), 404
+    # Dosyayı bul (mp3 veya mp4)
+    file_path = None
+    file_ext = 'mp3'
+    for ext in ['mp3', 'mp4', 'm4a', 'webm']:
+        check_p = os.path.join(DOWNLOAD_DIR, f"{file_id}.{ext}")
+        if os.path.exists(check_p):
+            file_path = check_p
+            file_ext = ext
+            break
+
+    if not file_path:
+        return render_template('index.html', download_error="Bu dosyanın süresi dolmuş veya dosya bulunamadı."), 404
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT safe_title FROM conversions WHERE file_id = ?', (file_id,))
+    cursor.execute('SELECT safe_title, media_type FROM conversions WHERE file_id = ?', (file_id,))
     row = cursor.fetchone()
     conn.close()
 
-    download_name = f"{row['safe_title'] if row else file_id}.mp3"
+    download_name = f"{row['safe_title'] if row else file_id}.{file_ext}"
+    mimetype = 'video/mp4' if file_ext == 'mp4' else 'audio/mpeg'
 
-    # MTA ve tarayıcı stream desteği için direct send_file (dosyayı hemen silmiyoruz, MTA dinleyebilsin ve son parçalarda kalsın diye)
     return send_file(
         file_path,
         as_attachment=True,
         download_name=download_name,
-        mimetype='audio/mpeg'
+        mimetype=mimetype
     )
 
 # ================= EN SON DÖNÜŞTÜRÜLEN 3 PARÇA =================
@@ -348,7 +347,7 @@ def get_recent_conversions():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT file_id, title, thumbnail, duration, uploader, size, username, created_at
+        SELECT file_id, title, thumbnail, duration, uploader, size, media_type, quality, username, created_at
         FROM conversions
         ORDER BY id DESC
         LIMIT 3
@@ -358,9 +357,7 @@ def get_recent_conversions():
 
     items = []
     for r in rows:
-        # Dosyanın diskte hala var olup olmadığını kontrol et
-        fpath = os.path.join(DOWNLOAD_DIR, f"{r['file_id']}.mp3")
-        is_available = os.path.exists(fpath)
+        mtype = r['media_type'] or 'MP3'
         items.append({
             'file_id': r['file_id'],
             'title': r['title'],
@@ -368,9 +365,10 @@ def get_recent_conversions():
             'duration': r['duration'],
             'uploader': r['uploader'],
             'size': r['size'],
+            'media_type': mtype,
+            'quality': r['quality'] or ('320 kbps' if mtype == 'MP3' else '720p'),
             'username': r['username'] or 'Anonim',
             'created_at': r['created_at'],
-            'is_available': is_available,
             'download_url': f"/download/{r['file_id']}"
         })
     return jsonify({'success': True, 'recent': items})
@@ -399,7 +397,6 @@ def add_comment():
     text = data.get('text', '').strip()
     username = data.get('username', '').strip() or session.get('username', '').strip()
     
-    # İsimsiz kullanıcı yorum yapamaz!
     if not username or username.lower() == 'anonim':
         return jsonify({'success': False, 'error': 'Yorum yapabilmek için lütfen önce isminizi belirleyin.'}), 403
 
@@ -454,19 +451,15 @@ def kurucu_data():
     conn = get_db()
     cursor = conn.cursor()
 
-    # Ziyaretçiler
     cursor.execute('SELECT * FROM visitors ORDER BY id DESC')
     visitors = [dict(r) for r in cursor.fetchall()]
 
-    # Dönüştürmeler
     cursor.execute('SELECT * FROM conversions ORDER BY id DESC')
     conversions = [dict(r) for r in cursor.fetchall()]
 
-    # Yorumlar
     cursor.execute('SELECT * FROM comments ORDER BY id DESC')
     comments = [dict(r) for r in cursor.fetchall()]
 
-    # İstatistikler
     stats = {
         'total_visitors': len(visitors),
         'total_conversions': len(conversions),
@@ -499,8 +492,8 @@ def delete_comment():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("=" * 60)
-    print("  ★ REVAL MP3 DÖNÜŞTÜRÜCÜ & KURUCU PANELİ BAŞLATILIYOR ★")
+    print("  ★ REVAL DÖNÜŞTÜRÜCÜ (MP3 & MP4) BAŞLATILIYOR ★")
     print(f"  Erişim Adresi: http://0.0.0.0:{port}")
-    print(f"  Kurucu Paneli: http://0.0.0.0:{port}/kurucu")
+    print(f"  Gizli Kurucu Paneli: http://0.0.0.0:{port}/kurucu")
     print("=" * 60)
     app.run(host='0.0.0.0', port=port, debug=False)

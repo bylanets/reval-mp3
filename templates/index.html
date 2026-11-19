@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reval MP3 Dönüştürücü • YouTube to MP3 320kbps</title>
+    <title>Reval Medya Dönüştürücü • MP3 & MP4</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,9 +25,9 @@
             <div class="modal-icon">
                 <i class="fa-solid fa-headphones"></i>
             </div>
-            <h2 class="modal-title">Reval MP3'e Hoş Geldin!</h2>
+            <h2 class="modal-title">Reval Medya'ya Hoş Geldin!</h2>
             <p class="modal-desc">
-                Müzik dönüştürmek ve topluluğa katılmak için lütfen bir <strong>kullanıcı adı</strong> veya <strong>ismini</strong> belirle:
+                Devam etmek ve şarkı/video dönüştürebilmek için lütfen adını veya takma adını belirle:
             </p>
             <form onsubmit="handleSaveName(event)" class="modal-form">
                 <div class="modal-input-group">
@@ -46,28 +46,28 @@
     <!-- ANA UYGULAMA ALANI -->
     <div class="app-wrapper">
         
-        <!-- Üst Bar (Kullanıcı Bilgisi & Kurucu Paneli Linki) -->
+        <!-- Üst Bar (Sağ üstteki kurucu linki kaldırıldı, gizlendi!) -->
         <nav class="top-navbar">
             <div class="user-badge" id="userBadge" onclick="promptChangeName()" title="İsmini Değiştir">
                 <i class="fa-solid fa-circle-user"></i>
                 <span id="navUsername">Giriş Yapılıyor...</span>
-                <span class="change-hint"><i class="fa-solid fa-pen"></i></span>
+                <span class="change-hint"><i class="fa-solid fa-pen"></i> Değiştir</span>
             </div>
-            <a href="/kurucu" class="kurucu-link" target="_blank" title="Kurucu Yönetim Paneli">
-                <i class="fa-solid fa-crown"></i> <span>Kurucu Paneli</span>
-            </a>
+            <div class="header-badges">
+                <span class="online-indicator"><span class="pulse-dot"></span> Sunucu Aktif</span>
+            </div>
         </nav>
 
         <!-- Üst Başlık Bölümü -->
         <header class="app-header">
             <div class="badge-pill">
-                <i class="fa-solid fa-bolt"></i> Ultra Hızlı • 320 kbps MP3
+                <i class="fa-solid fa-bolt"></i> Ultra Hızlı • MP3 & MP4 Dönüştürücü
             </div>
             <h1 class="app-title">
-                <span class="neon-text">Reval</span> MP3 Dönüştürücü
+                <span class="neon-text">Reval</span> Medya Dönüştürücü
             </h1>
             <p class="app-subtitle">
-                YouTube videolarını en yüksek ses kalitesiyle anında MP3'e çevirin ve doğrudan MTA linki alın.
+                YouTube videolarını istediğiniz kalitede anında MP3 ses veya MP4 video olarak indirin.
             </p>
         </header>
 
@@ -90,6 +90,8 @@
 
             <!-- Form Bölümü -->
             <form id="convertForm" onsubmit="handleConvert(event)">
+                
+                <!-- URL Giriş Alanı -->
                 <div class="input-group">
                     <span class="input-icon">
                         <i class="fa-brands fa-youtube"></i>
@@ -110,10 +112,42 @@
                     </button>
                 </div>
 
+                <!-- Format ve Kalite Seçim Paneli -->
+                <div class="format-quality-panel">
+                    <!-- Format Seçimi: MP3 vs MP4 -->
+                    <div class="format-selector">
+                        <label class="control-label"><i class="fa-solid fa-file-export"></i> Format:</label>
+                        <div class="format-pills">
+                            <button type="button" class="format-pill active" id="pillMp3" onclick="selectFormat('mp3')">
+                                <i class="fa-solid fa-music"></i>
+                                <span>MP3 (Ses)</span>
+                            </button>
+                            <button type="button" class="format-pill" id="pillMp4" onclick="selectFormat('mp4')">
+                                <i class="fa-solid fa-video"></i>
+                                <span>MP4 (Video)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Kalite Seçimi (Dinamik) -->
+                    <div class="quality-selector">
+                        <label class="control-label" id="qualityLabel"><i class="fa-solid fa-sliders"></i> Ses Kalitesi:</label>
+                        <div class="quality-dropdown-wrap">
+                            <select id="qualitySelect" class="quality-select">
+                                <option value="320" selected>320 kbps (En Yüksek / Orijinal)</option>
+                                <option value="256">256 kbps (Yüksek Kalite)</option>
+                                <option value="192">192 kbps (Standart Kalite)</option>
+                                <option value="128">128 kbps (Hafif / Düşük Boyut)</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down select-arrow"></i>
+                        </div>
+                    </div>
+                </div>
+
                 <button type="submit" id="submitBtn" class="btn-convert">
                     <span class="btn-content">
                         <i class="fa-solid fa-wand-magic-sparkles"></i>
-                        <span>Dönüştür</span>
+                        <span id="submitBtnText">MP3 Olarak Dönüştür</span>
                     </span>
                     <span class="btn-glow"></span>
                 </button>
@@ -124,7 +158,7 @@
                 <div class="spinner-wrapper">
                     <div class="neon-spinner"></div>
                     <div class="spinner-center-icon">
-                        <i class="fa-solid fa-music"></i>
+                        <i class="fa-solid fa-music" id="loadingIcon"></i>
                     </div>
                 </div>
                 
@@ -137,7 +171,7 @@
                 </div>
 
                 <h3 class="loading-title">Dönüştürülüyor...</h3>
-                <p id="loadingStatusText" class="loading-desc">YouTube'dan video analiz ediliyor ve 320 kbps MP3 hazırlanıyor...</p>
+                <p id="loadingStatusText" class="loading-desc">YouTube'dan video analiz ediliyor ve dosyanız hazırlanıyor...</p>
             </div>
 
             <!-- Sonuç Kartı -->
@@ -155,28 +189,25 @@
                     </div>
 
                     <div class="meta-info">
-                        <h2 id="resTitle" class="video-title">Şarkı Başlığı</h2>
+                        <h2 id="resTitle" class="video-title">Medya Başlığı</h2>
                         <p id="resUploader" class="video-channel">
                             <i class="fa-solid fa-circle-user"></i> Kanal Adı
                         </p>
 
                         <div class="info-badges">
-                            <span class="badge info-pill">
-                                <i class="fa-solid fa-music"></i> MP3 320 kbps
+                            <span class="badge info-pill neon-pill" id="resFormatBadge">
+                                <i class="fa-solid fa-music"></i> MP3 (320 kbps)
                             </span>
                             <span class="badge info-pill" id="resSize">
                                 <i class="fa-solid fa-hard-drive"></i> 0.0 MB
-                            </span>
-                            <span class="badge info-pill neon-pill">
-                                <i class="fa-solid fa-shield-halved"></i> Orijinal Ses
                             </span>
                         </div>
                     </div>
                 </div>
 
-                <!-- MTA Link Alanı & Butonlar -->
+                <!-- MTA / Doğrudan Link Alanı -->
                 <div class="mta-link-box">
-                    <span class="mta-link-label"><i class="fa-solid fa-link"></i> Doğrudan MTA / Oynatma Linki:</span>
+                    <span class="mta-link-label"><i class="fa-solid fa-link"></i> Doğrudan İndirme / MTA Oynatma Linki:</span>
                     <div class="mta-input-row">
                         <input type="text" id="mtaLinkInput" readonly>
                         <button type="button" class="btn-copy-mta" onclick="copyMtaLink()">
@@ -188,7 +219,7 @@
                 <div class="result-actions">
                     <a id="downloadBtn" href="#" class="btn-download">
                         <i class="fa-solid fa-download"></i>
-                        <span>MP3 Olarak İndir</span>
+                        <span id="downloadBtnText">Dosyayı İndir</span>
                     </a>
                     <button type="button" class="btn-reset" onclick="resetForm()">
                         <i class="fa-solid fa-rotate-left"></i>
@@ -264,10 +295,13 @@
             </div>
         </section>
 
-        <!-- Alt Bilgi -->
+        <!-- Alt Bilgi (Gizli Kurucu Girişi: Küçük taç ikonuna basılarak açılır) -->
         <footer class="app-footer">
             <p>
-                <i class="fa-solid fa-shield-halved"></i> Reval MP3 Dönüştürücü &bull; MTA Uyumlu Doğrudan Stream Servisi
+                <i class="fa-solid fa-shield-halved"></i> Reval Medya Dönüştürücü &bull; MTA Uyumlu Stream Servisi
+                <span class="secret-admin-trigger" onclick="goToAdminPanel()" title="Sistem Paneli">
+                    <i class="fa-solid fa-crown"></i>
+                </span>
             </p>
         </footer>
     </div>
@@ -280,10 +314,9 @@
 
     <!-- JavaScript Kodları -->
     <script>
-        // Global Değişkenler
         let currentUsername = localStorage.getItem('reval_user_name') || '';
+        let selectedFormat = 'mp3';
 
-        // DOM Elementleri
         const nameModal = document.getElementById('nameModal');
         const modalNameInput = document.getElementById('modalNameInput');
         const navUsername = document.getElementById('navUsername');
@@ -298,36 +331,42 @@
         const pasteBtn = document.getElementById('pasteBtn');
         const convertForm = document.getElementById('convertForm');
         const submitBtn = document.getElementById('submitBtn');
+        const submitBtnText = document.getElementById('submitBtnText');
         const loadingBox = document.getElementById('loadingBox');
         const loadingStatusText = document.getElementById('loadingStatusText');
+        const loadingIcon = document.getElementById('loadingIcon');
         const resultBox = document.getElementById('resultBox');
         const errorBox = document.getElementById('errorBox');
         const errorMessage = document.getElementById('errorMessage');
+
+        const pillMp3 = document.getElementById('pillMp3');
+        const pillMp4 = document.getElementById('pillMp4');
+        const qualityLabel = document.getElementById('qualityLabel');
+        const qualitySelect = document.getElementById('qualitySelect');
 
         const resThumbnail = document.getElementById('resThumbnail');
         const resTitle = document.getElementById('resTitle');
         const resUploader = document.getElementById('resUploader');
         const resDuration = document.getElementById('resDuration');
         const resSize = document.getElementById('resSize');
+        const resFormatBadge = document.getElementById('resFormatBadge');
         const downloadBtn = document.getElementById('downloadBtn');
+        const downloadBtnText = document.getElementById('downloadBtnText');
         const mtaLinkInput = document.getElementById('mtaLinkInput');
 
         const recentContainer = document.getElementById('recentContainer');
         const commentsList = document.getElementById('commentsList');
         const commentCountBadge = document.getElementById('commentCountBadge');
 
-        // Sayfa Başlatma
         document.addEventListener('DOMContentLoaded', () => {
             initUser();
             loadRecentConversions();
             loadComments();
 
-            // Karakter sayacı
             commentText.addEventListener('input', () => {
                 charCounter.textContent = `${commentText.value.length} / 500`;
             });
 
-            // Input kontrolü
             videoUrlInput.addEventListener('input', () => {
                 if (videoUrlInput.value.trim().length > 0) {
                     clearBtn.style.display = 'inline-flex';
@@ -339,7 +378,37 @@
             });
         });
 
-        // 1. KULLANICI İSİM YÖNETİMİ
+        // FORMAT DEĞİŞTİRME (MP3 vs MP4)
+        function selectFormat(fmt) {
+            selectedFormat = fmt;
+            if (fmt === 'mp4') {
+                pillMp4.classList.add('active');
+                pillMp3.classList.remove('active');
+                qualityLabel.innerHTML = '<i class="fa-solid fa-sliders"></i> Video Kalitesi:';
+                qualitySelect.innerHTML = `
+                    <option value="1080">1080p Full HD</option>
+                    <option value="720" selected>720p HD (Önerilen)</option>
+                    <option value="480">480p Standart</option>
+                    <option value="360">360p Düşük Boyut</option>
+                `;
+                submitBtnText.textContent = "MP4 Video Olarak Dönüştür";
+                loadingIcon.className = "fa-solid fa-video";
+            } else {
+                pillMp3.classList.add('active');
+                pillMp4.classList.remove('active');
+                qualityLabel.innerHTML = '<i class="fa-solid fa-sliders"></i> Ses Kalitesi:';
+                qualitySelect.innerHTML = `
+                    <option value="320" selected>320 kbps (En Yüksek / Orijinal)</option>
+                    <option value="256">256 kbps (Yüksek Kalite)</option>
+                    <option value="192">192 kbps (Standart Kalite)</option>
+                    <option value="128">128 kbps (Hafif / Düşük Boyut)</option>
+                `;
+                submitBtnText.textContent = "MP3 Ses Olarak Dönüştür";
+                loadingIcon.className = "fa-solid fa-music";
+            }
+        }
+
+        // KULLANICI İSİM YÖNETİMİ
         function initUser() {
             if (!currentUsername) {
                 nameModal.style.display = 'flex';
@@ -348,7 +417,6 @@
             } else {
                 nameModal.style.display = 'none';
                 updateUserInterface(currentUsername);
-                // Sunucuya bildir
                 sendUserToServer(currentUsername);
             }
         }
@@ -402,7 +470,12 @@
             }
         }
 
-        // 2. DÖNÜŞTÜRME
+        // GİZLİ KURUCU PANELİNE GİT
+        function goToAdminPanel() {
+            window.open('/kurucu', '_blank');
+        }
+
+        // DÖNÜŞTÜRME
         async function handleConvert(e) {
             e.preventDefault();
             hideError();
@@ -422,12 +495,19 @@
             loadingBox.style.display = 'flex';
             resultBox.style.display = 'none';
 
-            const statusMsgs = [
+            const qualityVal = qualitySelect.value;
+            const statusMsgs = selectedFormat === 'mp4' ? [
+                "YouTube videosu taranıyor...",
+                "Video ve ses akışları ayrıştırılıyor...",
+                `${qualityVal}p kalitesinde MP4 formatına dönüştürülüyor...`,
+                "Dosya hazırlanıyor..."
+            ] : [
                 "YouTube videosu analiz ediliyor...",
-                "Android & Web istemcileriyle bot koruması aşılıyor...",
-                "En yüksek kalitede ses ayrıştırılıyor...",
-                "FFmpeg ile 320 kbps MP3 hazırlanıyor..."
+                "Android & Web istemcisiyle bot koruması aşılıyor...",
+                `FFmpeg ile ${qualityVal} kbps MP3 hazırlanıyor...`,
+                "Dosya hazırlanıyor..."
             ];
+
             let idx = 0;
             loadingStatusText.textContent = statusMsgs[0];
             const interval = setInterval(() => {
@@ -439,7 +519,12 @@
                 const response = await fetch('/convert', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url, username: currentUsername })
+                    body: JSON.stringify({ 
+                        url: url, 
+                        username: currentUsername,
+                        format: selectedFormat,
+                        quality: qualityVal
+                    })
                 });
 
                 const data = await response.json();
@@ -449,23 +534,24 @@
                     throw new Error(data.error || "Dönüştürme başarısız oldu.");
                 }
 
-                // Bilgileri doldur
                 resThumbnail.src = data.thumbnail || '';
                 resTitle.textContent = data.title;
                 resUploader.innerHTML = `<i class="fa-solid fa-circle-user"></i> ${data.uploader || 'Bilinmeyen'}`;
                 resDuration.textContent = data.duration;
                 resSize.innerHTML = `<i class="fa-solid fa-hard-drive"></i> ${data.size}`;
+                
+                const iconClass = data.media_type === 'MP4' ? 'fa-video' : 'fa-music';
+                resFormatBadge.innerHTML = `<i class="fa-solid ${iconClass}"></i> ${data.media_type} (${data.quality})`;
 
-                // Doğrudan Link (MTA Uyumlu Tam URL)
                 const fullDownloadUrl = window.location.origin + data.download_url;
                 mtaLinkInput.value = fullDownloadUrl;
                 downloadBtn.href = data.download_url;
+                downloadBtnText.textContent = `${data.media_type} Olarak İndir`;
 
                 loadingBox.style.display = 'none';
                 convertForm.style.display = 'none';
                 resultBox.style.display = 'flex';
 
-                // Son dönüştürülenleri hemen tazele
                 loadRecentConversions();
 
             } catch (err) {
@@ -476,18 +562,17 @@
             }
         }
 
-        // MTA Linkini Panoya Kopyalama
         function copyMtaLink() {
             mtaLinkInput.select();
             navigator.clipboard.writeText(mtaLinkInput.value).then(() => {
-                showToast("MTA Oynatma Linki Panoya Kopyalandı! 🎵");
+                showToast("Oynatma / İndirme Linki Kopyalandı! 🎵");
             }).catch(() => {
                 document.execCommand('copy');
-                showToast("MTA Linki Kopyalandı!");
+                showToast("Link Kopyalandı!");
             });
         }
 
-        // 3. EN SON DÖNÜŞTÜRÜLEN 3 PARÇA
+        // EN SON DÖNÜŞTÜRÜLEN 3 PARÇA
         async function loadRecentConversions() {
             try {
                 const res = await fetch('/api/recent');
@@ -499,6 +584,9 @@
 
                 recentContainer.innerHTML = data.recent.map(item => {
                     const fullUrl = window.location.origin + item.download_url;
+                    const mtype = item.media_type || 'MP3';
+                    const icon = mtype === 'MP4' ? 'fa-video' : 'fa-music';
+                    const badgeClass = mtype === 'MP4' ? 'badge-mp4' : 'badge-mp3';
                     return `
                         <div class="recent-card">
                             <div class="recent-thumb-wrap">
@@ -508,9 +596,10 @@
                             <div class="recent-details">
                                 <h4 class="recent-title" title="${item.title}">${item.title}</h4>
                                 <div class="recent-meta">
+                                    <span class="media-type-pill ${badgeClass}"><i class="fa-solid ${icon}"></i> ${mtype}</span>
                                     <span><i class="fa-solid fa-user"></i> ${item.username}</span>
                                     <span>&bull;</span>
-                                    <span><i class="fa-solid fa-music"></i> 320 kbps</span>
+                                    <span>${item.quality}</span>
                                     <span>&bull;</span>
                                     <span>${item.size}</span>
                                 </div>
@@ -519,7 +608,7 @@
                                 <a href="${item.download_url}" class="btn-recent-dl" title="İndir">
                                     <i class="fa-solid fa-download"></i>
                                 </a>
-                                <button type="button" class="btn-recent-copy" onclick="copyCustomUrl('${fullUrl}')" title="MTA Linkini Kopyala">
+                                <button type="button" class="btn-recent-copy" onclick="copyCustomUrl('${fullUrl}')" title="Linki Kopyala">
                                     <i class="fa-regular fa-copy"></i>
                                 </button>
                             </div>
@@ -534,11 +623,11 @@
 
         function copyCustomUrl(url) {
             navigator.clipboard.writeText(url).then(() => {
-                showToast("MTA Müzik Linki Kopyalandı! 🎶");
+                showToast("MTA / İndirme Linki Kopyalandı! 🎶");
             });
         }
 
-        // 4. YORUM YÖNETİMİ
+        // YORUM YÖNETİMİ
         async function loadComments() {
             try {
                 const res = await fetch('/api/comments');
@@ -608,7 +697,6 @@
             }
         }
 
-        // YARDIMCI FONKSİYONLAR
         function handlePaste() {
             navigator.clipboard.readText().then(text => {
                 if (text) {
