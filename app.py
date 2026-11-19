@@ -1,13 +1,13 @@
-﻿import os
+import os
 import io
 import re
 import time
 import uuid
 import sqlite3
+import threading
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, abort, session
 
-# FFmpeg yolunu otomatik tespit ve entegre etme
 try:
     import static_ffmpeg
     static_ffmpeg.add_paths()
@@ -25,6 +25,10 @@ DB_PATH = os.path.join(BASE_DIR, 'database.db')
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'reval2026')
+
+# Canlı ilerleme durumlarını tutan bellek sözlüğü
+# PROGRESS_TRACKER[task_id] = { 'status': 'downloading'|'converting'|'finished'|'error', 'percent': 45.2, 'speed': '2.1 MB/s', 'eta': '00:15', 'text': '...' }
+PROGRESS_TRACKER = {}
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -71,8 +75,6 @@ def init_db():
             created_at TEXT NOT NULL
         )
     ''')
-    
-    # Kolon var mı kontrolü (Geriye dönük uyumluluk)
     cursor.execute('PRAGMA table_info(conversions)')
     cols = [c[1] for c in cursor.fetchall()]
     if 'media_type' not in cols:
@@ -126,16 +128,18 @@ def cleanup_expired_files(max_age_seconds=86400):
                         os.remove(fpath)
                     except Exception:
                         pass
+        # Progress tracker temizliği (1 saatten eski görevler)
+        for tid in list(PROGRESS_TRACKER.keys()):
+            if now - PROGRESS_TRACKER[tid].get('created_at', now) > 3600:
+                PROGRESS_TRACKER.pop(tid, None)
     except Exception as e:
         app.logger.warning(f"Temizlik hatası: {e}")
 
-# ================= ANA SAYFA =================
 @app.route('/')
 def index():
     cleanup_expired_files()
     return render_template('index.html')
 
-# ================= KULLANICI İSİM & IP KAYDI =================
 @app.route('/api/register_user', methods=['POST'])
 def register_user():
     data = request.get_json(silent=True) or {}
@@ -166,41 +170,69 @@ def register_user():
 
     return jsonify({'success': True, 'username': username})
 
-# ================= DÖNÜŞTÜRME (MP3 & MP4 DESTEKLİ) =================
-@app.route('/convert', methods=['POST'])
-def convert_video():
-    cleanup_expired_files()
-    
-    data = request.get_json(silent=True) or {}
-    url = data.get('url', '').strip()
-    username = data.get('username', '').strip() or session.get('username', 'Misafir')
-    media_format = (data.get('format', 'mp3') or 'mp3').lower()
-    quality = str(data.get('quality', '320')).strip()
+# CANLI İLERLEME (PROGRESS) TAKİP ENDPOINT'İ
+@app.route('/api/progress/<task_id>', methods=['GET'])
+def get_progress(task_id):
+    prog = PROGRESS_TRACKER.get(task_id)
+    if not prog:
+        return jsonify({'status': 'waiting', 'percent': 0, 'text': 'Bağlantı kuruluyor...'})
+    return jsonify(prog)
 
-    if not url:
-        return jsonify({'success': False, 'error': 'Lütfen geçerli bir YouTube video linki girin.'}), 400
-    
-    clean_url = re.sub(r'([?&])list=[^&]+', '', url)
-    clean_url = re.sub(r'([?&])index=[^&]+', '', clean_url)
-    clean_url = clean_url.rstrip('?&')
+# DÖNÜŞTÜRME İŞ PARÇACIĞI (BACKGROUND THREAD)
+def process_conversion_task(task_id, clean_url, media_format, quality, username, ip):
+    PROGRESS_TRACKER[task_id] = {
+        'status': 'starting',
+        'percent': 5,
+        'speed': '',
+        'eta': '',
+        'text': 'YouTube sunucularına bağlanılıyor...',
+        'created_at': time.time()
+    }
 
-    youtube_regex = r'^(https?://)?(www\.|m\.|music\.)?(youtube\.com|youtu\.be)/.+$'
-    if not re.match(youtube_regex, clean_url):
-        return jsonify({'success': False, 'error': 'Girdiğiniz link geçerli bir YouTube bağlantısı değil.'}), 400
-
-    file_id = uuid.uuid4().hex[:12]
+    file_id = task_id
     out_template = os.path.join(DOWNLOAD_DIR, f"{file_id}.%(ext)s")
 
-    # Temel ayarlar & Bot aşma
+    def ydl_progress_hook(d):
+        if d['status'] == 'downloading':
+            total = d.get('total_bytes') or d.get('total_bytes_estimate') or 0
+            downloaded = d.get('downloaded_bytes') or 0
+            percent = (downloaded / total * 100) if total > 0 else 0
+            
+            # Yüzdeyi 5 ile 85 arasında orantıla (kalan %15 FFmpeg dönüştürme için)
+            mapped_percent = min(85.0, 5.0 + (percent * 0.8))
+            speed = d.get('_speed_str', '')
+            eta = d.get('_eta_str', '')
+
+            PROGRESS_TRACKER[task_id].update({
+                'status': 'downloading',
+                'percent': round(mapped_percent, 1),
+                'speed': speed,
+                'eta': eta,
+                'text': f"İndiriliyor: %{round(percent, 1)} {f'({speed})' if speed else ''}"
+            })
+        elif d['status'] == 'finished':
+            PROGRESS_TRACKER[task_id].update({
+                'status': 'converting',
+                'percent': 90,
+                'speed': '',
+                'eta': '',
+                'text': 'FFmpeg ile format dönüştürülüyor ve ses işleniyor...'
+            })
+
+    # Ortak seçenekler
     common_opts = {
         'outtmpl': out_template,
         'quiet': True,
         'no_warnings': True,
         'noplaylist': True,
+        'nocheckcertificate': True,
+        'socket_timeout': 30,
+        'retries': 10,
+        'fragment_retries': 10,
+        'progress_hooks': [ydl_progress_hook],
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'ios', 'web'],
-                'skip': ['dash', 'hls']
+                'player_client': ['android', 'ios']
             }
         },
         'http_headers': {
@@ -209,8 +241,11 @@ def convert_video():
         }
     }
 
+    cookie_file = os.path.join(BASE_DIR, 'cookies.txt')
+    if os.path.exists(cookie_file) and os.path.getsize(cookie_file) > 0:
+        common_opts['cookiefile'] = cookie_file
+
     if media_format == 'mp4':
-        # Video Kalitesi Seçimi: 1080, 720, 480, 360
         valid_heights = ['1080', '720', '480', '360']
         target_height = quality if quality in valid_heights else '720'
         quality_label = f"{target_height}p HD" if int(target_height) >= 720 else f"{target_height}p"
@@ -226,7 +261,6 @@ def convert_video():
         })
         expected_ext = 'mp4'
     else:
-        # MP3 Kalitesi Seçimi: 320, 256, 192, 128 kbps
         valid_mp3 = ['320', '256', '192', '128']
         target_quality = quality if quality in valid_mp3 else '320'
         quality_label = f"{target_quality} kbps"
@@ -243,8 +277,18 @@ def convert_video():
         expected_ext = 'mp3'
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(clean_url, download=True)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(clean_url, download=True)
+        except Exception as first_err:
+            err_str = str(first_err).lower()
+            if "bot" in err_str or "sign in" in err_str or "confirm" in err_str:
+                PROGRESS_TRACKER[task_id]['text'] = 'Yedek bağlantı motoru devreye sokuluyor...'
+                ydl_opts['extractor_args'] = {'youtube': {'player_client': ['mweb', 'android']}}
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(clean_url, download=True)
+            else:
+                raise first_err
             
             raw_title = info.get('title', 'YouTube Media')
             safe_title = sanitize_filename(raw_title)
@@ -252,10 +296,7 @@ def convert_video():
             duration = format_duration(info.get('duration'))
             uploader = info.get('uploader', 'Bilinmeyen Kanal')
             
-            # Üretilen dosyanın yolunu bul
             expected_file = os.path.join(DOWNLOAD_DIR, f"{file_id}.{expected_ext}")
-            
-            # Eğer beklenen uzantı tam oturmadıysa klasörde file_id ile başlayan dosyayı bul
             if not os.path.exists(expected_file):
                 for f in os.listdir(DOWNLOAD_DIR):
                     if f.startswith(file_id):
@@ -264,13 +305,12 @@ def convert_video():
                         break
             
             if not os.path.exists(expected_file):
-                return jsonify({'success': False, 'error': 'Dönüştürme işlemi tamamlanamadı veya dosya bulunamadı.'}), 500
+                PROGRESS_TRACKER[task_id] = {'status': 'error', 'error': 'Dönüştürme tamamlandı fakat dosya bulunamadı.'}
+                return
             
             file_size_str = format_size(os.path.getsize(expected_file))
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            ip = get_client_ip()
 
-            # Veritabanına kaydet
             conn = get_db()
             cursor = conn.cursor()
             cursor.execute('''
@@ -285,26 +325,71 @@ def convert_video():
             conn.commit()
             conn.close()
 
-            return jsonify({
-                'success': True,
-                'file_id': file_id,
-                'title': raw_title,
-                'safe_title': safe_title,
-                'thumbnail': thumbnail,
-                'duration': duration,
-                'uploader': uploader,
-                'size': file_size_str,
-                'media_type': expected_ext.upper(),
-                'quality': quality_label,
-                'download_url': f"/download/{file_id}"
-            })
+            PROGRESS_TRACKER[task_id] = {
+                'status': 'finished',
+                'percent': 100,
+                'text': 'Dönüşüm tamamlandı!',
+                'result': {
+                    'file_id': file_id,
+                    'title': raw_title,
+                    'safe_title': safe_title,
+                    'thumbnail': thumbnail,
+                    'duration': duration,
+                    'uploader': uploader,
+                    'size': file_size_str,
+                    'media_type': expected_ext.upper(),
+                    'quality': quality_label,
+                    'download_url': f"/download/{file_id}"
+                }
+            }
 
-    except yt_dlp.utils.DownloadError as de:
-        error_msg = str(de)
-        clean_err = error_msg.split('ERROR:')[-1].strip()
-        return jsonify({'success': False, 'error': f"İndirme hatası: {clean_err}"}), 400
     except Exception as e:
-        return jsonify({'success': False, 'error': f"Beklenmeyen bir hata oluştu: {str(e)}"}), 500
+        err_msg = str(e).split('ERROR:')[-1].strip()
+        PROGRESS_TRACKER[task_id] = {
+            'status': 'error',
+            'error': f"İndirme hatası: {err_msg}"
+        }
+
+# DÖNÜŞTÜRMEYİ BAŞLATAN ENDPOINT (ANINDA TASK ID DÖNER)
+@app.route('/convert', methods=['POST'])
+def convert_video():
+    cleanup_expired_files()
+    
+    data = request.get_json(silent=True) or {}
+    url = data.get('url', '').strip()
+    username = data.get('username', '').strip() or session.get('username', 'Misafir')
+    media_format = (data.get('format', 'mp3') or 'mp3').lower()
+    quality = str(data.get('quality', '320')).strip()
+
+    if not url:
+        return jsonify({'success': False, 'error': 'Lütfen geçerli bir YouTube video linki girin.'}), 400
+    
+    vid_match = re.search(r'(?:v=|\/|youtu\.be\/|shorts\/)([0-9A-Za-z_-]{11})', url)
+    if vid_match:
+        clean_url = f"https://www.youtube.com/watch?v={vid_match.group(1)}"
+    else:
+        clean_url = re.sub(r'([?&])(list|index|start_radio)=[^&]+', '', url)
+        clean_url = clean_url.rstrip('?&')
+
+    youtube_regex = r'^(https?://)?(www\.|m\.|music\.)?(youtube\.com|youtu\.be)/.+$'
+    if not re.match(youtube_regex, clean_url):
+        return jsonify({'success': False, 'error': 'Girdiğiniz link geçerli bir YouTube bağlantısı değil.'}), 400
+
+    task_id = uuid.uuid4().hex[:12]
+    ip = get_client_ip()
+
+    # Arka planda iş parçacığında çalıştır (canlı progress için)
+    t = threading.Thread(
+        target=process_conversion_task,
+        args=(task_id, clean_url, media_format, quality, username, ip),
+        daemon=True
+    )
+    t.start()
+
+    return jsonify({
+        'success': True,
+        'task_id': task_id
+    })
 
 # ================= İNDİRME & STREAM =================
 @app.route('/download/<file_id>')
@@ -312,7 +397,6 @@ def download_file(file_id):
     if not re.match(r'^[a-zA-Z0-9]+$', file_id):
         abort(400, "Geçersiz dosya kimliği.")
 
-    # Dosyayı bul (mp3 veya mp4)
     file_path = None
     file_ext = 'mp3'
     for ext in ['mp3', 'mp4', 'm4a', 'webm']:
@@ -492,7 +576,7 @@ def delete_comment():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print("=" * 60)
-    print("  ★ REVAL DÖNÜŞTÜRÜCÜ (MP3 & MP4) BAŞLATILIYOR ★")
+    print("  ★ REVAL DÖNÜŞTÜRÜCÜ (CANLI İLERLEME & BOT FIX) BAŞLATILIYOR ★")
     print(f"  Erişim Adresi: http://0.0.0.0:{port}")
     print(f"  Gizli Kurucu Paneli: http://0.0.0.0:{port}/kurucu")
     print("=" * 60)

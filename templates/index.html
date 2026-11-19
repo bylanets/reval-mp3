@@ -7,7 +7,7 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Stil Dosyası -->
@@ -46,7 +46,7 @@
     <!-- ANA UYGULAMA ALANI -->
     <div class="app-wrapper">
         
-        <!-- Üst Bar (Sağ üstteki kurucu linki kaldırıldı, gizlendi!) -->
+        <!-- Üst Bar (Sağ üstteki kurucu linki gizlendi!) -->
         <nav class="top-navbar">
             <div class="user-badge" id="userBadge" onclick="promptChangeName()" title="İsmini Değiştir">
                 <i class="fa-solid fa-circle-user"></i>
@@ -153,15 +153,30 @@
                 </button>
             </form>
 
-            <!-- Yükleniyor Göstergesi -->
+            <!-- Yükleniyor ve Canlı Aşama Göstergesi (% ve Mor Çubuk) -->
             <div id="loadingBox" class="loading-container" style="display: none;">
-                <div class="spinner-wrapper">
-                    <div class="neon-spinner"></div>
-                    <div class="spinner-center-icon">
-                        <i class="fa-solid fa-music" id="loadingIcon"></i>
+                
+                <!-- Üst Kısım: Yüzdelik Oran -->
+                <div class="progress-meta-top">
+                    <span class="stage-tag"><i class="fa-solid fa-bolt"></i> Dönüştürme Aşaması</span>
+                    <div class="percentage-display">
+                        <span id="progressPercentNum">0</span><span class="percent-symbol">%</span>
                     </div>
                 </div>
-                
+
+                <!-- Mor Temalı Canlı İlerleme Çubuğu -->
+                <div class="neon-progress-container">
+                    <div id="neonProgressBar" class="neon-progress-bar" style="width: 0%;">
+                        <div class="progress-glow-head"></div>
+                    </div>
+                </div>
+
+                <!-- Alt Kısım: Durum Metni ve İndirme Hızı -->
+                <div class="progress-details-row">
+                    <span id="loadingStatusText" class="progress-status-text">Bağlantı kuruluyor...</span>
+                    <span id="progressSpeedText" class="progress-speed-text"></span>
+                </div>
+
                 <div class="sound-wave">
                     <div class="wave-bar"></div>
                     <div class="wave-bar"></div>
@@ -169,9 +184,6 @@
                     <div class="wave-bar"></div>
                     <div class="wave-bar"></div>
                 </div>
-
-                <h3 class="loading-title">Dönüştürülüyor...</h3>
-                <p id="loadingStatusText" class="loading-desc">YouTube'dan video analiz ediliyor ve dosyanız hazırlanıyor...</p>
             </div>
 
             <!-- Sonuç Kartı -->
@@ -257,7 +269,6 @@
                 <span class="comment-count-badge" id="commentCountBadge">0 Yorum</span>
             </div>
 
-            <!-- Yorum Ekleme Formu -->
             <div class="comment-form-container">
                 <div id="commentLockedNotice" class="comment-locked-notice" style="display: none;">
                     <i class="fa-solid fa-lock"></i>
@@ -289,7 +300,6 @@
                 </form>
             </div>
 
-            <!-- Yorum Listesi -->
             <div id="commentsList" class="comments-list">
                 <div class="comments-empty">Henüz hiç yorum yok. İlk yorumu sen yap! ✨</div>
             </div>
@@ -316,6 +326,7 @@
     <script>
         let currentUsername = localStorage.getItem('reval_user_name') || '';
         let selectedFormat = 'mp3';
+        let progressPollInterval = null;
 
         const nameModal = document.getElementById('nameModal');
         const modalNameInput = document.getElementById('modalNameInput');
@@ -332,9 +343,13 @@
         const convertForm = document.getElementById('convertForm');
         const submitBtn = document.getElementById('submitBtn');
         const submitBtnText = document.getElementById('submitBtnText');
+        
         const loadingBox = document.getElementById('loadingBox');
+        const progressPercentNum = document.getElementById('progressPercentNum');
+        const neonProgressBar = document.getElementById('neonProgressBar');
         const loadingStatusText = document.getElementById('loadingStatusText');
-        const loadingIcon = document.getElementById('loadingIcon');
+        const progressSpeedText = document.getElementById('progressSpeedText');
+
         const resultBox = document.getElementById('resultBox');
         const errorBox = document.getElementById('errorBox');
         const errorMessage = document.getElementById('errorMessage');
@@ -378,7 +393,6 @@
             });
         });
 
-        // FORMAT DEĞİŞTİRME (MP3 vs MP4)
         function selectFormat(fmt) {
             selectedFormat = fmt;
             if (fmt === 'mp4') {
@@ -392,7 +406,6 @@
                     <option value="360">360p Düşük Boyut</option>
                 `;
                 submitBtnText.textContent = "MP4 Video Olarak Dönüştür";
-                loadingIcon.className = "fa-solid fa-video";
             } else {
                 pillMp3.classList.add('active');
                 pillMp4.classList.remove('active');
@@ -404,11 +417,9 @@
                     <option value="128">128 kbps (Hafif / Düşük Boyut)</option>
                 `;
                 submitBtnText.textContent = "MP3 Ses Olarak Dönüştür";
-                loadingIcon.className = "fa-solid fa-music";
             }
         }
 
-        // KULLANICI İSİM YÖNETİMİ
         function initUser() {
             if (!currentUsername) {
                 nameModal.style.display = 'flex';
@@ -470,12 +481,11 @@
             }
         }
 
-        // GİZLİ KURUCU PANELİNE GİT
         function goToAdminPanel() {
             window.open('/kurucu', '_blank');
         }
 
-        // DÖNÜŞTÜRME
+        // CANLI İLERLEME TAKİBİ İLE DÖNÜŞTÜRME
         async function handleConvert(e) {
             e.preventDefault();
             hideError();
@@ -495,25 +505,10 @@
             loadingBox.style.display = 'flex';
             resultBox.style.display = 'none';
 
-            const qualityVal = qualitySelect.value;
-            const statusMsgs = selectedFormat === 'mp4' ? [
-                "YouTube videosu taranıyor...",
-                "Video ve ses akışları ayrıştırılıyor...",
-                `${qualityVal}p kalitesinde MP4 formatına dönüştürülüyor...`,
-                "Dosya hazırlanıyor..."
-            ] : [
-                "YouTube videosu analiz ediliyor...",
-                "Android & Web istemcisiyle bot koruması aşılıyor...",
-                `FFmpeg ile ${qualityVal} kbps MP3 hazırlanıyor...`,
-                "Dosya hazırlanıyor..."
-            ];
+            // İlerleme çubuğunu sıfırla
+            updateProgressBar(0, 'YouTube sunucularına bağlanılıyor...', '');
 
-            let idx = 0;
-            loadingStatusText.textContent = statusMsgs[0];
-            const interval = setInterval(() => {
-                idx = (idx + 1) % statusMsgs.length;
-                loadingStatusText.textContent = statusMsgs[idx];
-            }, 3000);
+            const qualityVal = qualitySelect.value;
 
             try {
                 const response = await fetch('/convert', {
@@ -528,38 +523,78 @@
                 });
 
                 const data = await response.json();
-                clearInterval(interval);
 
-                if (!response.ok || !data.success) {
-                    throw new Error(data.error || "Dönüştürme başarısız oldu.");
+                if (!response.ok || !data.success || !data.task_id) {
+                    throw new Error(data.error || "Dönüştürme başlatılamadı.");
                 }
 
-                resThumbnail.src = data.thumbnail || '';
-                resTitle.textContent = data.title;
-                resUploader.innerHTML = `<i class="fa-solid fa-circle-user"></i> ${data.uploader || 'Bilinmeyen'}`;
-                resDuration.textContent = data.duration;
-                resSize.innerHTML = `<i class="fa-solid fa-hard-drive"></i> ${data.size}`;
-                
-                const iconClass = data.media_type === 'MP4' ? 'fa-video' : 'fa-music';
-                resFormatBadge.innerHTML = `<i class="fa-solid ${iconClass}"></i> ${data.media_type} (${data.quality})`;
-
-                const fullDownloadUrl = window.location.origin + data.download_url;
-                mtaLinkInput.value = fullDownloadUrl;
-                downloadBtn.href = data.download_url;
-                downloadBtnText.textContent = `${data.media_type} Olarak İndir`;
-
-                loadingBox.style.display = 'none';
-                convertForm.style.display = 'none';
-                resultBox.style.display = 'flex';
-
-                loadRecentConversions();
+                // Canlı aşama takibini başlat (polling)
+                pollProgress(data.task_id);
 
             } catch (err) {
-                clearInterval(interval);
                 loadingBox.style.display = 'none';
                 submitBtn.disabled = false;
                 showError(err.message || "Bağlantı hatası oluştu.");
             }
+        }
+
+        function updateProgressBar(percent, text, speed) {
+            progressPercentNum.textContent = Math.round(percent);
+            neonProgressBar.style.width = `${percent}%`;
+            loadingStatusText.textContent = text || 'İşleniyor...';
+            progressSpeedText.textContent = speed || '';
+        }
+
+        function pollProgress(taskId) {
+            if (progressPollInterval) clearInterval(progressPollInterval);
+
+            progressPollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/progress/${taskId}`);
+                    const data = await res.json();
+
+                    if (data.status === 'downloading' || data.status === 'starting' || data.status === 'converting') {
+                        updateProgressBar(data.percent || 10, data.text, data.speed);
+                    } else if (data.status === 'finished') {
+                        clearInterval(progressPollInterval);
+                        updateProgressBar(100, 'Tamamlandı!', '');
+
+                        setTimeout(() => {
+                            displayResult(data.result);
+                        }, 500);
+
+                    } else if (data.status === 'error') {
+                        clearInterval(progressPollInterval);
+                        loadingBox.style.display = 'none';
+                        submitBtn.disabled = false;
+                        showError(data.error || "İndirme sırasında bir hata oluştu.");
+                    }
+                } catch (err) {
+                    console.error("Progress polling error:", err);
+                }
+            }, 600); // 600ms'de bir canlı durum güncellemesi
+        }
+
+        function displayResult(result) {
+            resThumbnail.src = result.thumbnail || '';
+            resTitle.textContent = result.title;
+            resUploader.innerHTML = `<i class="fa-solid fa-circle-user"></i> ${result.uploader || 'Bilinmeyen'}`;
+            resDuration.textContent = result.duration;
+            resSize.innerHTML = `<i class="fa-solid fa-hard-drive"></i> ${result.size}`;
+            
+            const iconClass = result.media_type === 'MP4' ? 'fa-video' : 'fa-music';
+            resFormatBadge.innerHTML = `<i class="fa-solid ${iconClass}"></i> ${result.media_type} (${result.quality})`;
+
+            const fullDownloadUrl = window.location.origin + result.download_url;
+            mtaLinkInput.value = fullDownloadUrl;
+            downloadBtn.href = result.download_url;
+            downloadBtnText.textContent = `${result.media_type} Olarak İndir`;
+
+            loadingBox.style.display = 'none';
+            convertForm.style.display = 'none';
+            resultBox.style.display = 'flex';
+
+            loadRecentConversions();
         }
 
         function copyMtaLink() {
@@ -726,6 +761,7 @@
         }
 
         function resetForm() {
+            if (progressPollInterval) clearInterval(progressPollInterval);
             resultBox.style.display = 'none';
             loadingBox.style.display = 'none';
             convertForm.style.display = 'block';
