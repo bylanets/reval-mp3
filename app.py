@@ -3,6 +3,7 @@ import io
 import re
 import time
 import uuid
+import hashlib
 import sqlite3
 import threading
 from datetime import datetime
@@ -16,15 +17,18 @@ except Exception as e:
 
 import yt_dlp
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'reval-mp3-secret-key-2026'
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOAD_DIR = os.path.join(BASE_DIR, 'downloads')
 DB_PATH = os.path.join(BASE_DIR, 'database.db')
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'reval2026')
+# Kurucu Şifresi ve Oturum Güvenliği
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'bylanetkurucu')
+ADMIN_TOKEN = hashlib.sha256(ADMIN_PASSWORD.encode('utf-8')).hexdigest()[:24]
+
+app = Flask(__name__)
+# Şifre her değiştiğinde SECRET_KEY otomatik değişir; böylece eski tüm admin oturumları anında geçersiz kılınır!
+app.config['SECRET_KEY'] = f'bylanet-mp3-secret-{ADMIN_TOKEN}'
 
 # Canlı ilerleme durumlarını tutan bellek sözlüğü
 # PROGRESS_TRACKER[task_id] = { 'status': 'downloading'|'converting'|'finished'|'error', 'percent': 45.2, 'speed': '2.1 MB/s', 'eta': '00:15', 'text': '...' }
@@ -75,6 +79,15 @@ def init_db():
             created_at TEXT NOT NULL
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS admin_logins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            identifier TEXT NOT NULL,
+            ip TEXT NOT NULL,
+            login_time TEXT NOT NULL,
+            user_agent TEXT
+        )
+    ''')
     cursor.execute('PRAGMA table_info(conversions)')
     cols = [c[1] for c in cursor.fetchall()]
     if 'media_type' not in cols:
@@ -84,6 +97,9 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+def is_admin_authenticated():
+    return session.get('is_admin') is True and session.get('admin_token') == ADMIN_TOKEN
 
 init_db()
 
@@ -242,6 +258,13 @@ def process_conversion_task(task_id, clean_url, media_format, quality, username,
     }
 
     cookie_file = os.path.join(BASE_DIR, 'cookies.txt')
+    if not os.path.exists(cookie_file) and os.environ.get('YOUTUBE_COOKIES'):
+        try:
+            with open(cookie_file, 'w', encoding='utf-8') as cf:
+                cf.write(os.environ.get('YOUTUBE_COOKIES'))
+        except Exception:
+            pass
+
     if os.path.exists(cookie_file) and os.path.getsize(cookie_file) > 0:
         common_opts['cookiefile'] = cookie_file
 
@@ -344,7 +367,10 @@ def process_conversion_task(task_id, clean_url, media_format, quality, username,
             }
 
     except Exception as e:
-        err_msg = str(e).split('ERROR:')[-1].strip()
+        raw_err = str(e)
+        err_msg = raw_err.split('ERROR:')[-1].strip()
+        if "bot" in raw_err.lower() or "sign in" in raw_err.lower() or "confirm you" in raw_err.lower():
+            err_msg = "YouTube bulut sunucusunu (Render IP) bot olarak algıladı. Çözüm: Projeye bir kez 'cookies.txt' ekleyin veya bilgisayarınızdaki 'tek_tikla_baslat.bat' ile sıfır hatayla sınırsız kullanın."
         PROGRESS_TRACKER[task_id] = {
             'status': 'error',
             'error': f"İndirme hatası: {err_msg}"
@@ -521,16 +547,46 @@ def kurucu_panel():
 @app.route('/api/kurucu/login', methods=['POST'])
 def kurucu_login():
     data = request.get_json(silent=True) or {}
-    password = data.get('password', '')
+    password = (data.get('password') or '').strip()
+    email = (data.get('email') or '').strip() or 'bylanetkurucu@gmail.com'
+
     if password == ADMIN_PASSWORD:
         session['is_admin'] = True
-        return jsonify({'success': True})
+        session['admin_token'] = ADMIN_TOKEN
+        session['admin_email'] = email
+
+        now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        ip = get_client_ip()
+        user_agent = request.headers.get('User-Agent', '')[:120]
+
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO admin_logins (identifier, ip, login_time, user_agent)
+                VALUES (?, ?, ?, ?)
+            ''', (email, ip, now_str, user_agent))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"[Admin Log Hatası]: {e}")
+
+        return jsonify({'success': True, 'email': email})
+
+    # Hatalı şifre denemesinde oturumu anında temizle
+    session.clear()
     return jsonify({'success': False, 'error': 'Geçersiz kurucu şifresi!'}), 401
+
+@app.route('/api/kurucu/logout', methods=['POST', 'GET'])
+def kurucu_logout():
+    session.clear()
+    return jsonify({'success': True})
 
 @app.route('/api/kurucu/data', methods=['GET'])
 def kurucu_data():
-    if not session.get('is_admin'):
-        return jsonify({'success': False, 'error': 'Yetkisiz erişim.'}), 403
+    if not is_admin_authenticated():
+        session.clear()
+        return jsonify({'success': False, 'error': 'Yetkisiz erişim. Şifre değişti, lütfen tekrar giriş yapın.', 'need_login': True}), 401
 
     conn = get_db()
     cursor = conn.cursor()
@@ -544,25 +600,32 @@ def kurucu_data():
     cursor.execute('SELECT * FROM comments ORDER BY id DESC')
     comments = [dict(r) for r in cursor.fetchall()]
 
+    cursor.execute('SELECT * FROM admin_logins ORDER BY id DESC')
+    admin_logins = [dict(r) for r in cursor.fetchall()]
+
     stats = {
         'total_visitors': len(visitors),
         'total_conversions': len(conversions),
-        'total_comments': len(comments)
+        'total_comments': len(comments),
+        'total_admin_logins': len(admin_logins)
     }
 
     conn.close()
     return jsonify({
         'success': True,
+        'current_admin': session.get('admin_email', 'Kurucu'),
         'stats': stats,
         'visitors': visitors,
         'conversions': conversions,
-        'comments': comments
+        'comments': comments,
+        'admin_logins': admin_logins
     })
 
 @app.route('/api/kurucu/delete_comment', methods=['POST'])
 def delete_comment():
-    if not session.get('is_admin'):
-        return jsonify({'success': False, 'error': 'Yetkisiz erişim.'}), 403
+    if not is_admin_authenticated():
+        session.clear()
+        return jsonify({'success': False, 'error': 'Yetkisiz erişim.'}), 401
 
     data = request.get_json(silent=True) or {}
     cid = data.get('id')

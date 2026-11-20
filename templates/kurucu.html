@@ -14,7 +14,7 @@
     <div class="ambient-glow glow-1"></div>
     <div class="ambient-glow glow-2"></div>
 
-    <!-- 1. GİRİŞ MODAL'I / ŞİFRE EKRANI -->
+    <!-- 1. GİRİŞ MODAL'I / ŞİFRE & GMAIL EKRANI -->
     <div id="loginScreen" class="kurucu-login-wrap">
         <div class="converter-card kurucu-login-card">
             <div class="kurucu-crown-icon">
@@ -24,6 +24,10 @@
             <p class="kurucu-login-desc">Bu alan sadece sistem yöneticilerine ve kurucuya özeldir.</p>
             
             <form onsubmit="handleAdminLogin(event)" class="kurucu-login-form">
+                <div class="input-group" style="margin-bottom: 12px;">
+                    <span class="input-icon"><i class="fa-solid fa-envelope" style="color: #ec4899;"></i></span>
+                    <input type="text" id="adminEmailInput" placeholder="Kurucu Gmail / E-posta (örn: bylanets@gmail.com)" required autocomplete="email">
+                </div>
                 <div class="input-group">
                     <span class="input-icon"><i class="fa-solid fa-key" style="color: #a855f7;"></i></span>
                     <input type="password" id="adminPassInput" placeholder="Kurucu Şifresini Girin..." required autocomplete="off">
@@ -49,6 +53,10 @@
                 <span>Reval • Kurucu Paneli</span>
             </div>
             <div class="kurucu-actions">
+                <span id="activeAdminPill" class="admin-logged-pill">
+                    <i class="fa-solid fa-user-shield"></i>
+                    <span id="activeAdminText">bylanetkurucu</span>
+                </span>
                 <a href="/" class="btn-nav-outline" target="_blank"><i class="fa-solid fa-external-link"></i> Siteye Git</a>
                 <button type="button" class="btn-nav-outline" onclick="loadDashboardData()"><i class="fa-solid fa-rotate"></i> Yenile</button>
                 <button type="button" class="btn-logout" onclick="logoutAdmin()"><i class="fa-solid fa-right-from-bracket"></i> Çıkış</button>
@@ -78,6 +86,13 @@
                     <span class="stat-label">Topluluk Yorumu</span>
                 </div>
             </div>
+            <div class="stat-card">
+                <div class="stat-icon icon-shield" style="background: rgba(236, 72, 153, 0.15); color: #ec4899;"><i class="fa-solid fa-shield-halved"></i></div>
+                <div class="stat-info">
+                    <span class="stat-num" id="statAdminLogins">0</span>
+                    <span class="stat-label">Yetkili Girişi</span>
+                </div>
+            </div>
         </div>
 
         <!-- Sekmeler (Tabs) -->
@@ -90,6 +105,9 @@
             </button>
             <button type="button" class="tab-btn" onclick="switchTab('comments')">
                 <i class="fa-solid fa-comment-dots"></i> Yorum Yönetimi
+            </button>
+            <button type="button" class="tab-btn" onclick="switchTab('adminLogins')">
+                <i class="fa-solid fa-fingerprint"></i> Kurucu Giriş Kayıtları (Gmail & IP)
             </button>
         </div>
 
@@ -125,6 +143,7 @@
                             <tr>
                                 <th>Thumbnail</th>
                                 <th>Parça Başlığı</th>
+                                <th>Format / Kalite</th>
                                 <th>Dönüştüren</th>
                                 <th>IP</th>
                                 <th>Süre / Boyut</th>
@@ -133,7 +152,7 @@
                             </tr>
                         </thead>
                         <tbody id="conversionsTbody">
-                            <tr><td colspan="7" class="text-center">Yükleniyor...</td></tr>
+                            <tr><td colspan="8" class="text-center">Yükleniyor...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -162,24 +181,61 @@
                 </div>
             </div>
         </section>
+
+        <!-- TAB 4: KURUCU GİRİŞ KAYITLARI (GMAIL & IP) -->
+        <section id="tabAdminLogins" class="tab-content">
+            <div class="table-card">
+                <div class="table-responsive">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Kurucu Gmail / Kimlik</th>
+                                <th>Giriş Yapan IP</th>
+                                <th>Giriş Tarihi ve Saati</th>
+                                <th>Tarayıcı / Cihaz</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminLoginsTbody">
+                            <tr><td colspan="5" class="text-center">Yükleniyor...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
     </div>
 
     <script>
         const loginScreen = document.getElementById('loginScreen');
         const dashboardScreen = document.getElementById('dashboardScreen');
+        const adminEmailInput = document.getElementById('adminEmailInput');
         const adminPassInput = document.getElementById('adminPassInput');
         const loginError = document.getElementById('loginError');
+        const activeAdminPill = document.getElementById('activeAdminPill');
+        const activeAdminText = document.getElementById('activeAdminText');
+
+        // Sayfa yüklendiğinde mevcut oturumu doğrula
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDashboardData();
+        });
 
         async function handleAdminLogin(e) {
             e.preventDefault();
+            const email = (adminEmailInput.value || '').trim();
             const pass = adminPassInput.value;
             loginError.style.display = 'none';
+
+            if (!email) {
+                loginError.textContent = "Lütfen kurucu Gmail / E-posta adresinizi girin.";
+                loginError.style.display = 'block';
+                return;
+            }
 
             try {
                 const res = await fetch('/api/kurucu/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pass })
+                    body: JSON.stringify({ email: email, password: pass })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -187,11 +243,11 @@
                     dashboardScreen.style.display = 'block';
                     loadDashboardData();
                 } else {
-                    loginError.textContent = data.error || "Hatalı şifre!";
+                    loginError.textContent = data.error || "Hatalı kurucu şifresi!";
                     loginError.style.display = 'block';
                 }
             } catch (err) {
-                loginError.textContent = "Giriş yapılamadı, bağlantı hatası.";
+                loginError.textContent = "Giriş yapılamadı, sunucu bağlantı hatası.";
                 loginError.style.display = 'block';
             }
         }
@@ -199,6 +255,13 @@
         async function loadDashboardData() {
             try {
                 const res = await fetch('/api/kurucu/data');
+                if (res.status === 401 || res.status === 403) {
+                    // Şifre değiştiğinde veya oturum bittiğinde anında giriş ekranına at
+                    loginScreen.style.display = 'flex';
+                    dashboardScreen.style.display = 'none';
+                    return;
+                }
+
                 const data = await res.json();
                 if (!data.success) {
                     loginScreen.style.display = 'flex';
@@ -206,14 +269,24 @@
                     return;
                 }
 
-                // İstatistikler
-                document.getElementById('statVisitors').textContent = data.stats.total_visitors;
-                document.getElementById('statConversions').textContent = data.stats.total_conversions;
-                document.getElementById('statComments').textContent = data.stats.total_comments;
+                // Oturum aktif, dashboard ekranını göster
+                loginScreen.style.display = 'none';
+                dashboardScreen.style.display = 'block';
 
-                // Ziyaretçiler Tablosu
+                if (data.current_admin) {
+                    activeAdminText.textContent = data.current_admin;
+                    activeAdminPill.style.display = 'inline-flex';
+                }
+
+                // İstatistikler
+                document.getElementById('statVisitors').textContent = data.stats.total_visitors || 0;
+                document.getElementById('statConversions').textContent = data.stats.total_conversions || 0;
+                document.getElementById('statComments').textContent = data.stats.total_comments || 0;
+                document.getElementById('statAdminLogins').textContent = data.stats.total_admin_logins || 0;
+
+                // 1. Ziyaretçiler Tablosu
                 const vTbody = document.getElementById('visitorsTbody');
-                if (data.visitors.length === 0) {
+                if (!data.visitors || data.visitors.length === 0) {
                     vTbody.innerHTML = '<tr><td colspan="6" class="text-center">Kayıtlı ziyaretçi bulunamadı.</td></tr>';
                 } else {
                     vTbody.innerHTML = data.visitors.map(v => `
@@ -221,26 +294,27 @@
                             <td>#${v.id}</td>
                             <td><strong class="user-highlight"><i class="fa-solid fa-user"></i> ${escapeHtml(v.username)}</strong></td>
                             <td><code class="ip-code">${escapeHtml(v.ip)}</code></td>
-                            <td>${v.first_visit}</td>
-                            <td>${v.last_seen}</td>
+                            <td>${escapeHtml(v.first_visit)}</td>
+                            <td>${escapeHtml(v.last_seen)}</td>
                             <td><span class="badge-count">${v.conversions_count} Parça</span></td>
                         </tr>
                     `).join('');
                 }
 
-                // Dönüştürmeler Tablosu
+                // 2. Dönüştürmeler Tablosu
                 const cTbody = document.getElementById('conversionsTbody');
-                if (data.conversions.length === 0) {
-                    cTbody.innerHTML = '<tr><td colspan="7" class="text-center">Henüz dönüştürülen parça yok.</td></tr>';
+                if (!data.conversions || data.conversions.length === 0) {
+                    cTbody.innerHTML = '<tr><td colspan="8" class="text-center">Henüz dönüştürülen parça yok.</td></tr>';
                 } else {
                     cTbody.innerHTML = data.conversions.map(c => `
                         <tr>
-                            <td><img src="${c.thumbnail}" class="table-thumb" alt="thumb"></td>
+                            <td><img src="${escapeHtml(c.thumbnail)}" class="table-thumb" alt="thumb" onerror="this.src='/static/favicon.ico'"></td>
                             <td><div class="table-song-title">${escapeHtml(c.title)}</div></td>
+                            <td><span class="badge-format">${escapeHtml(c.media_type || 'MP3')} • ${escapeHtml(c.quality || '320k')}</span></td>
                             <td><strong>${escapeHtml(c.username || 'Anonim')}</strong></td>
                             <td><code class="ip-code">${escapeHtml(c.ip || '-')}</code></td>
-                            <td>${c.duration} / ${c.size}</td>
-                            <td>${c.created_at}</td>
+                            <td>${escapeHtml(c.duration)} / ${escapeHtml(c.size)}</td>
+                            <td>${escapeHtml(c.created_at)}</td>
                             <td>
                                 <a href="/download/${c.file_id}" class="table-dl-btn" title="İndir"><i class="fa-solid fa-download"></i></a>
                             </td>
@@ -248,9 +322,9 @@
                     `).join('');
                 }
 
-                // Yorumlar Tablosu
+                // 3. Yorumlar Tablosu
                 const cmTbody = document.getElementById('commentsTbody');
-                if (data.comments.length === 0) {
+                if (!data.comments || data.comments.length === 0) {
                     cmTbody.innerHTML = '<tr><td colspan="6" class="text-center">Hiç yorum yapılmamış.</td></tr>';
                 } else {
                     cmTbody.innerHTML = data.comments.map(cm => `
@@ -259,12 +333,33 @@
                             <td><strong>${escapeHtml(cm.username)}</strong></td>
                             <td><div class="table-comment-text">${escapeHtml(cm.text)}</div></td>
                             <td><code class="ip-code">${escapeHtml(cm.ip || '-')}</code></td>
-                            <td>${cm.created_at}</td>
+                            <td>${escapeHtml(cm.created_at)}</td>
                             <td>
                                 <button type="button" class="btn-del-comment" onclick="deleteComment(${cm.id})" title="Yorumu Sil">
                                     <i class="fa-solid fa-trash"></i>
                                 </button>
                             </td>
+                        </tr>
+                    `).join('');
+                }
+
+                // 4. Kurucu Giriş Kayıtları Tablosu (Gmail & IP)
+                const aTbody = document.getElementById('adminLoginsTbody');
+                if (!data.admin_logins || data.admin_logins.length === 0) {
+                    aTbody.innerHTML = '<tr><td colspan="5" class="text-center">Henüz kurucu girişi kaydı yok.</td></tr>';
+                } else {
+                    aTbody.innerHTML = data.admin_logins.map(a => `
+                        <tr>
+                            <td>#${a.id}</td>
+                            <td>
+                                <span class="badge-gmail">
+                                    <i class="fa-brands fa-google"></i>
+                                    <strong>${escapeHtml(a.identifier)}</strong>
+                                </span>
+                            </td>
+                            <td><code class="ip-code">${escapeHtml(a.ip)}</code></td>
+                            <td><strong>${escapeHtml(a.login_time)}</strong></td>
+                            <td><span style="font-size: 0.78rem; color: var(--text-muted);">${escapeHtml(a.user_agent || 'Bilinmiyor')}</span></td>
                         </tr>
                     `).join('');
                 }
@@ -286,7 +381,7 @@
                 if (data.success) {
                     loadDashboardData();
                 } else {
-                    alert("Yorum silinemedi!");
+                    alert(data.error || "Yorum silinemedi!");
                 }
             } catch (e) {
                 alert("Bağlantı hatası.");
@@ -306,20 +401,27 @@
             } else if (tabId === 'comments') {
                 document.querySelectorAll('.tab-btn')[2].classList.add('active');
                 document.getElementById('tabComments').classList.add('active');
+            } else if (tabId === 'adminLogins') {
+                document.querySelectorAll('.tab-btn')[3].classList.add('active');
+                document.getElementById('tabAdminLogins').classList.add('active');
             }
         }
 
-        function logoutAdmin() {
-            window.location.href = '/';
+        async function logoutAdmin() {
+            try {
+                await fetch('/api/kurucu/logout', { method: 'POST' });
+            } catch (e) {}
+            // Ekranı temizle ve şifre girişine yönlendir
+            dashboardScreen.style.display = 'none';
+            loginScreen.style.display = 'flex';
+            adminPassInput.value = '';
+            adminEmailInput.value = '';
         }
 
         function escapeHtml(s) {
             const m = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
             return String(s || '').replace(/[&<>"']/g, c => m[c]);
         }
-
-        // Sayfa açılışında oturum kontrolü
-        loadDashboardData();
     </script>
 </body>
 </html>
